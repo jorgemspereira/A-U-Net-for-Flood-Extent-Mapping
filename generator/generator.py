@@ -58,7 +58,9 @@ def image_generator(path_input, path_mask, batch_size=5, random_transformation=F
             mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
 
             x.append(img)
-            y.append(to_categorical(mask, num_classes=2))
+            y.append(mask)
+
+            # y.append(to_categorical(mask, num_classes=2))
 
             total_patches += 1
 

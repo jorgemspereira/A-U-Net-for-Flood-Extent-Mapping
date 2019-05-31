@@ -4,7 +4,7 @@ import os.path
 import imageio
 import numpy as np
 import tensorflow as tf
-from keras import backend as K
+from keras import backend as K, losses
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.engine.saving import load_model
 from keras.optimizers import Adam
@@ -36,7 +36,7 @@ path_test_masks_template = "/home/jsilva/flood-data/testset_0{}_segmentation_mas
 
 
 N_BANDS = 3
-N_CLASSES = 2  # for binary classification
+N_CLASSES = 1  # for binary classification
 N_EPOCHS = 100
 SEED = 20
 
@@ -86,7 +86,7 @@ def train_net():
     val_gen = image_generator(x_val, y_val, batch_size=BATCH_SIZE, shuffle=False, random_transformation=False)
 
     model = unet_model(N_CLASSES, PATCH_SZ, n_channels=N_BANDS)
-    model.compile(optimizer=Adam(lr=1e-4), loss=dice_coefficient_multi_label, metrics=["accuracy"])
+    model.compile(optimizer=Adam(lr=1e-5), loss=losses.binary_crossentropy, metrics=["accuracy"])
 
     model.fit_generator(train_gen,
                         steps_per_epoch=train_steps,
@@ -105,19 +105,19 @@ def dice_coefficient(y_true, y_pred, smooth=1e-7):
     return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
 
 
-def dice_coefficient_multi_label(y_true, y_pred):
-    dice = N_CLASSES
-    for index in range(N_CLASSES):
-        dice -= dice_coefficient(y_true[:, :, :, index], y_pred[:, :, :, index])
-    return dice/N_CLASSES
+# def dice_coefficient_multi_label(y_true, y_pred):
+#    dice = N_CLASSES
+#    for index in range(N_CLASSES):
+#        dice -= dice_coefficient(y_true[:, :, :, index], y_pred[:, :, :, index])
+#    return dice/N_CLASSES
 
 
 def get_model(args):
     if args['mode'] == Mode.train:
         return train_net()
 
-    custom_object = {'dice_coefficient': dice_coefficient,
-                     'dice_coefficient_multi_label': dice_coefficient_multi_label}
+    custom_object = {'dice_coefficient': dice_coefficient}
+                    # 'dice_coefficient_multi_label': dice_coefficient_multi_label}
     return load_model(WEIGHTS_PATH, custom_object)
 
 
@@ -142,7 +142,8 @@ def calculate_results(model):
 
     results = []
     for index, pred in enumerate(predictions):
-        result = np.argmax(pred, axis=2)
+        result = np.where(pred <= 0.5, 0, 1)
+        # result = np.argmax(pred, axis=2)
         original = imageio.imread(y[index])
 
         name_image = y[index].split("_")[-1].split(".")[0]
