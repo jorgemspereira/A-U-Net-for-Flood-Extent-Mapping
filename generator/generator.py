@@ -15,13 +15,15 @@ def get_mask(path):
 
 def get_rand_patch(img, mask):
     patch_img, patch_mask = img, mask
-
-    # Apply some random transformations
     random_transformation = np.random.randint(1, 4)
-    if random_transformation == 1:  # reverse first dimension
+
+    # reverse first dimension
+    if random_transformation == 1:
         patch_img = img[::-1, :, :]
         patch_mask = mask[::-1, :]
-    elif random_transformation == 2:    # reverse second dimension
+
+    # reverse second dimension
+    elif random_transformation == 2:
         patch_img = img[:, ::-1, :]
         patch_mask = mask[:, ::-1]
 
@@ -50,8 +52,8 @@ def image_generator(path_input, path_mask, batch_size=5, random_transformation=F
             img = get_input(ids_file_all.pop(index))
             mask = get_mask(ids_mask_all.pop(index))
 
-            # if random_transformation:
-            #     img, mask = get_rand_patch(img, mask)
+            if random_transformation:
+                img, mask = get_rand_patch(img, mask)
 
             mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
 
