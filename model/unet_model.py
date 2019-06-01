@@ -151,6 +151,5 @@ def unet_model(n_classes=5, im_sz=160, n_channels=8, n_filters_start=32, growth_
     # actv9 = squeeze_excite_block(actv9)
 
     conv10 = Conv2D(n_classes, (1, 1), activation='sigmoid', name='output1')(actv9)
-    conv10 = Reshape((320, 320))(conv10)
 
     return Model(inputs=inputs, outputs=conv10)

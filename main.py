@@ -4,17 +4,18 @@ import os.path
 import imageio
 import numpy as np
 import tensorflow as tf
-from keras import backend as K, losses
-from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from keras.engine.saving import load_model
 from keras.optimizers import Adam
 from keras.preprocessing import image
+from keras import losses
 from sklearn.metrics import jaccard_similarity_score
 from sklearn.model_selection import train_test_split
 
 from arguments.arguments import Mode
 from callbacks.clr_callback import CyclicLR
 from generator.generator import image_generator
+from losses.lovasz_losses_tf import keras_lovasz_hinge
 from model.unet_model import unet_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -23,20 +24,21 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 sess = tf.Session(config=config)
 
-path_train_images_template = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-' \
-                             'Sensing-Data-Sources-for-Flood-Extent-Mapping/dataset/devset_0{}_satellite_images/'
 
-path_train_original_template = "/home/jsilva/flood-data/devset_0{}_segmentation_masks/"
+base_path = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-Sensing-Data-Sources-for-Flood-Extent-Mapping'
 
-path_test_images_template = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-' \
-                            'Sensing-Data-Sources-for-Flood-Extent-Mapping/dataset/testset_0{}_satellite_images/'
 
-path_train_masks_template = "/home/jsilva/flood-data/devset_0{}_segmentation_masks/"
-path_test_masks_template = "/home/jsilva/flood-data/testset_0{}_segmentation_masks/"
+path_train_images_template = '{}/dataset/devset_0{}_satellite_images/'
+path_test_images_template = '{}/dataset/testset_0{}_satellite_images/'
 
+path_train_masks_template = "{}/flood-data/devset_0{}_segmentation_masks/"
+path_test_masks_template = "{}/flood-data/testset_0{}_segmentation_masks/"
+
+
+# for binary classification
+N_CLASSES = 1
 
 N_BANDS = 3
-N_CLASSES = 1  # for binary classification
 N_EPOCHS = 100
 SEED = 20
 
@@ -54,8 +56,8 @@ def get_files(path_images, path_masks):
     files_input, masks_input = [], []
 
     for index in range(1, 7):
-        complete_path = path_images.format(index)
-        complete_path_masks = path_masks.format(index)
+        complete_path = path_images.format(base_path, index)
+        complete_path_masks = path_masks.format(base_path, index)
 
         files_input.extend([complete_path + x for x in os.listdir(complete_path) if not x.startswith("._")])
         masks_input.extend([complete_path_masks + x for x in os.listdir(complete_path_masks) if not x.startswith("._")
@@ -67,12 +69,16 @@ def get_files(path_images, path_masks):
     return files_input, masks_input
 
 
-def get_callbacks(steps):
+def get_callbacks():
     return [
-        EarlyStopping(monitor='val_loss', restore_best_weights=True, patience=10, mode='auto'),
-        ModelCheckpoint(WEIGHTS_PATH, monitor='val_loss', save_best_only=True, mode='auto'),
-        CyclicLR(base_lr=1e-5, max_lr=1e-4, step_size=steps * 4, mode='triangular2')
+        EarlyStopping(monitor='val_loss', verbose=1, restore_best_weights=True, patience=10, mode='auto'),
+        ModelCheckpoint(WEIGHTS_PATH, monitor='val_loss', verbose=1, save_best_only=True, mode='auto'),
+        ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1, mode='auto')
     ]
+
+
+def custom_loss(y_true, y_pred):
+    return keras_lovasz_hinge(y_true, y_pred) + losses.binary_crossentropy(y_true, y_pred)
 
 
 def train_net():
@@ -86,39 +92,23 @@ def train_net():
     val_gen = image_generator(x_val, y_val, batch_size=BATCH_SIZE, shuffle=False, random_transformation=False)
 
     model = unet_model(N_CLASSES, PATCH_SZ, n_channels=N_BANDS)
-    model.compile(optimizer=Adam(lr=1e-5), loss=losses.binary_crossentropy, metrics=["accuracy"])
+    model.compile(optimizer=Adam(lr=1e-3), loss=custom_loss, metrics=['accuracy'])
 
-    model.fit_generator(train_gen,
+    model.fit_generator(generator=train_gen,
                         steps_per_epoch=train_steps,
                         epochs=N_EPOCHS,
                         validation_data=val_gen,
                         validation_steps=validation_steps,
                         verbose=1, shuffle=True,
-                        callbacks=get_callbacks(train_steps))
+                        callbacks=get_callbacks())
     return model
-
-
-def dice_coefficient(y_true, y_pred, smooth=1e-7):
-    y_true_f = K.flatten(y_true)
-    y_pred_f = K.flatten(y_pred)
-    intersection = K.sum(y_true_f * y_pred_f)
-    return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
-
-
-# def dice_coefficient_multi_label(y_true, y_pred):
-#    dice = N_CLASSES
-#    for index in range(N_CLASSES):
-#        dice -= dice_coefficient(y_true[:, :, :, index], y_pred[:, :, :, index])
-#    return dice/N_CLASSES
 
 
 def get_model(args):
     if args['mode'] == Mode.train:
         return train_net()
 
-    custom_object = {'dice_coefficient': dice_coefficient}
-                    # 'dice_coefficient_multi_label': dice_coefficient_multi_label}
-    return load_model(WEIGHTS_PATH, custom_object)
+    return load_model(WEIGHTS_PATH, {'custom_loss': custom_loss})
 
 
 def picture_from_mask(mask):
@@ -136,14 +126,15 @@ def picture_from_mask(mask):
 
 
 def calculate_results(model):
+    print("Calculating results...")
+
     x, y = get_files(path_test_images_template, path_test_masks_template)
     test_generator = image_generator(x, y, batch_size=1, shuffle=False, random_transformation=False)
     predictions = model.predict_generator(test_generator, steps=len(x), verbose=1)
 
     results = []
     for index, pred in enumerate(predictions):
-        result = np.where(pred <= 0.5, 0, 1)
-        # result = np.argmax(pred, axis=2)
+        result = np.where(pred.reshape((320, 320)) <= 0.5, 0, 1)
         original = imageio.imread(y[index])
 
         name_image = y[index].split("_")[-1].split(".")[0]

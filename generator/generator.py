@@ -1,10 +1,8 @@
 from random import randint
-import random
 
 import imageio
 import numpy as np
 import tifffile as tiff
-from keras.utils import to_categorical
 
 
 def get_input(path):
@@ -58,9 +56,7 @@ def image_generator(path_input, path_mask, batch_size=5, random_transformation=F
             mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
 
             x.append(img)
-            y.append(mask)
-
-            # y.append(to_categorical(mask, num_classes=2))
+            y.append(mask.reshape((320, 320, 1)))
 
             total_patches += 1
 

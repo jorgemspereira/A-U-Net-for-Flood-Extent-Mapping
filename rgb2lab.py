@@ -5,19 +5,21 @@ import numpy as np
 from skimage.color import rgb2lab
 from tqdm import tqdm
 
-path_train_images_template = '/home/jsilva/flood-data/devset_0{}_satellite_images/'
-new_path_train_images = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-' \
-                        'Sensing-Data-Sources-for-Flood-Extent-Mapping/dataset/devset_0{}_satellite_images/'
 
-path_test_images_template = '/home/jsilva/flood-data/testset_0{}_satellite_images/'
-new_path_test_images = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-' \
-                       'Sensing-Data-Sources-for-Flood-Extent-Mapping/dataset/testset_0{}_satellite_images/'
+base_path = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-Sensing-Data-Sources-for-Flood-Extent-Mapping'
+
+
+new_path_train_images = '{}/dataset/devset_0{}_satellite_images/'
+new_path_test_images = '{}/dataset/testset_0{}_satellite_images/'
+
+path_train_images_template = '{}/flood-data/devset_0{}_satellite_images/'
+path_test_images_template = '{}/flood-data/testset_0{}_satellite_images/'
 
 
 def convert(path_original, path_goal, max_range):
     for index in range(1, max_range):
-        path = path_original.format(index)
-        new_path = path_goal.format(index)
+        path = path_original.format(base_path, index)
+        new_path = path_goal.format(base_path, index)
 
         if not os.path.exists(new_path):
             os.makedirs(new_path)
