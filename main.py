@@ -8,15 +8,15 @@ from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from keras.engine.saving import load_model
 from keras.optimizers import Adam
 from keras.preprocessing import image
-from keras import losses
+from keras import backend as K, losses
 from sklearn.metrics import jaccard_similarity_score
 from sklearn.model_selection import train_test_split
 
 from arguments.arguments import Mode
-from callbacks.clr_callback import CyclicLR
 from generator.generator import image_generator
 from losses.lovasz_losses_tf import keras_lovasz_hinge
 from model.unet_model import unet_model
+from callbacks.clr_callback import CyclicLR
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -24,9 +24,7 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 sess = tf.Session(config=config)
 
-
 base_path = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-Sensing-Data-Sources-for-Flood-Extent-Mapping'
-
 
 path_train_images_template = '{}/dataset/devset_0{}_satellite_images/'
 path_test_images_template = '{}/dataset/testset_0{}_satellite_images/'
@@ -38,12 +36,12 @@ path_test_masks_template = "{}/flood-data/testset_0{}_segmentation_masks/"
 # for binary classification
 N_CLASSES = 1
 
-N_BANDS = 3
+N_BANDS = 4
 N_EPOCHS = 100
 SEED = 20
 
 PATCH_SZ = 320
-BATCH_SIZE = 8
+BATCH_SIZE = 16
 
 WEIGHTS_PATH = 'weights_unet'
 
@@ -69,11 +67,12 @@ def get_files(path_images, path_masks):
     return files_input, masks_input
 
 
-def get_callbacks():
+def get_callbacks(steps):
     return [
-        EarlyStopping(monitor='val_loss', verbose=1, restore_best_weights=True, patience=10, mode='auto'),
-        ModelCheckpoint(WEIGHTS_PATH, monitor='val_loss', verbose=1, save_best_only=True, mode='auto'),
+        EarlyStopping(monitor='val_loss', restore_best_weights=True, patience=10, mode='auto'),
+        ModelCheckpoint(WEIGHTS_PATH, monitor='val_loss', save_best_only=True, mode='auto'),
         ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1, mode='auto')
+        # CyclicLR(base_lr=1e-4, max_lr=1e-3, step_size=steps * 4, mode='triangular2')
     ]
 
 
@@ -83,7 +82,7 @@ def custom_loss(y_true, y_pred):
 
 def train_net():
     x, y = get_files(path_train_images_template, path_train_masks_template)
-    x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.20, random_state=SEED)
+    x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.15, random_state=SEED)
 
     train_steps = len(x_train) // BATCH_SIZE
     validation_steps = len(x_val) // BATCH_SIZE
@@ -92,22 +91,20 @@ def train_net():
     val_gen = image_generator(x_val, y_val, batch_size=BATCH_SIZE, shuffle=False, random_transformation=False)
 
     model = unet_model(N_CLASSES, PATCH_SZ, n_channels=N_BANDS)
-    model.compile(optimizer=Adam(lr=1e-3), loss=custom_loss, metrics=['accuracy'])
+    model.compile(optimizer=Adam(lr=1e-3), loss=custom_loss, metrics=["accuracy"])
 
-    model.fit_generator(generator=train_gen,
+    model.fit_generator(train_gen,
                         steps_per_epoch=train_steps,
                         epochs=N_EPOCHS,
                         validation_data=val_gen,
                         validation_steps=validation_steps,
                         verbose=1, shuffle=True,
-                        callbacks=get_callbacks())
+                        callbacks=get_callbacks(train_steps))
     return model
 
 
 def get_model(args):
-    if args['mode'] == Mode.train:
-        return train_net()
-
+    if args['mode'] == Mode.train: return train_net()
     return load_model(WEIGHTS_PATH, {'custom_loss': custom_loss})
 
 
@@ -116,12 +113,10 @@ def picture_from_mask(mask):
         0: [255, 255, 255],
         1: [0, 0, 255]
     }
-
     pict = np.empty(shape=(3, mask.shape[0], mask.shape[1]))
     for cl in range(len(colors)):
         for ch in range(3):
             pict[ch, :, :] = np.where(mask == cl, colors[cl][ch], pict[ch, :, :])
-
     return np.moveaxis(pict, 0, -1)
 
 
@@ -134,7 +129,7 @@ def calculate_results(model):
 
     results = []
     for index, pred in enumerate(predictions):
-        result = np.where(pred.reshape((320, 320)) <= 0.5, 0, 1)
+        result = np.where(pred.reshape((320, 320)) < 0.5, 0, 1)
         original = imageio.imread(y[index])
 
         name_image = y[index].split("_")[-1].split(".")[0]
