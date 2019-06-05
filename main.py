@@ -27,7 +27,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # for binary classification
 N_CLASSES = 1
 
-N_BANDS = 4
+N_BANDS = 9
 N_EPOCHS = 100
 SEED = 1234
 
@@ -109,7 +109,7 @@ def train_net():
     train_gen = image_generator(x_train, y_train, batch_size=BATCH_SIZE, random_transformation=True)
     val_gen = image_generator(x_val, y_val, batch_size=BATCH_SIZE, shuffle=False, random_transformation=False)
 
-    model = unet_model(N_CLASSES, PATCH_SZ, n_channels=N_BANDS)
+    model = unet_model(n_classes=N_CLASSES, init_seed=SEED, im_sz=PATCH_SZ, n_channels=N_BANDS)
     model.compile(optimizer=Adam(lr=1e-3), loss=custom_loss, metrics=[iou_score, "accuracy"])
     model.fit_generator(train_gen,
                         steps_per_epoch=train_steps,

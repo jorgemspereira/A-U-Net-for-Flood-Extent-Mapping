@@ -15,7 +15,7 @@ def get_mask(path):
 
 def get_rand_patch(img, mask):
     patch_img, patch_mask = img, mask
-    random_transformation = np.random.randint(1, 4)
+    random_transformation = np.random.randint(1, 6)
 
     # reverse first dimension
     if random_transformation == 1:
@@ -26,6 +26,14 @@ def get_rand_patch(img, mask):
     elif random_transformation == 2:
         patch_img = img[:, ::-1, :]
         patch_mask = mask[:, ::-1]
+
+    elif random_transformation == 3:
+        patch_img = img.transpose(1, 0, 2)
+        patch_mask = mask.T
+
+    elif random_transformation == 4:
+        patch_img = img[::-1, ::-1, :].transpose(1, 0, 2)
+        patch_mask = mask[::-1, ::-1].T
 
     return patch_img, patch_mask
 

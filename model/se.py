@@ -1,8 +1,9 @@
+from keras.initializers import he_normal
 from keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply, add, Permute, Conv2D, LeakyReLU
 from keras import backend as K
 
 
-def squeeze_excite_block(input, ratio=2):
+def squeeze_excite_block(input, init_seed=None, ratio=2):
     ''' Create a channel-wise squeeze-excite block
     Args:
         input: input tensor
@@ -17,15 +18,15 @@ def squeeze_excite_block(input, ratio=2):
     se_shape = (1, 1, filters)
     se = GlobalAveragePooling2D()(init)
     se = Reshape(se_shape)(se)
-    se = Dense(filters // ratio, kernel_initializer='he_normal', use_bias=False)(se)
+    se = Dense(filters // ratio, kernel_initializer=he_normal(seed=init_seed), use_bias=False)(se)
     se = LeakyReLU()(se)
-    se = Dense(filters, activation='sigmoid', kernel_initializer='he_normal', use_bias=False)(se)
+    se = Dense(filters, activation='sigmoid', kernel_initializer=he_normal(seed=init_seed), use_bias=False)(se)
     if K.image_data_format() == 'channels_first': se = Permute((3, 1, 2))(se)
     x = multiply([init, se])
     return x
 
 
-def spatial_squeeze_excite_block(input):
+def spatial_squeeze_excite_block(input, init_seed=None):
     ''' Create a spatial squeeze-excite block
     Args:
         input: input tensor
@@ -33,12 +34,12 @@ def spatial_squeeze_excite_block(input):
     References
     -   [Concurrent Spatial and Channel Squeeze & Excitation in Fully Convolutional Networks](https://arxiv.org/abs/1803.02579)
     '''
-    se = Conv2D(1, (1, 1), activation='sigmoid', use_bias=False, kernel_initializer='he_normal')(input)
+    se = Conv2D(1, (1, 1), activation='sigmoid', use_bias=False, kernel_initializer=he_normal(seed=init_seed))(input)
     x = multiply([input, se])
     return x
 
 
-def channel_spatial_squeeze_excite(input, ratio=16):
+def channel_spatial_squeeze_excite(input, init_seed=None, ratio=16):
     ''' Create a spatial squeeze-excite block
     Args:
         input: input tensor
@@ -48,7 +49,7 @@ def channel_spatial_squeeze_excite(input, ratio=16):
     -   [Squeeze and Excitation Networks](https://arxiv.org/abs/1709.01507)
     -   [Concurrent Spatial and Channel Squeeze & Excitation in Fully Convolutional Networks](https://arxiv.org/abs/1803.02579)
     '''
-    cse = squeeze_excite_block(input, ratio)
-    sse = spatial_squeeze_excite_block(input)
+    cse = squeeze_excite_block(input, init_seed, ratio)
+    sse = spatial_squeeze_excite_block(input, init_seed)
     x = add([cse, sse])
     return x
