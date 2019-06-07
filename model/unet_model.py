@@ -5,8 +5,7 @@ from keras.models import Model
 from model.se import channel_spatial_squeeze_excite
 
 
-def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_start=32, growth_factor=2, droprate=0.1):
-
+def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_start=32, growth_factor=2, droprate=0.3):
     # Block1
     n_filters = n_filters_start
     inputs = Input((im_sz, im_sz, n_channels), name='input')
@@ -31,7 +30,7 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
     pool2 = MaxPooling2D(pool_size=(2, 2), name='maxpool2')(actv2)
     pool2 = channel_spatial_squeeze_excite(pool2, init_seed=init_seed)
     pool2 = Dropout(droprate, name='dropout2')(pool2)
-    
+
     # Block3
     n_filters *= growth_factor
     pool2 = BatchNormalization(name='bn2')(pool2)
@@ -44,7 +43,7 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
     pool3 = MaxPooling2D(pool_size=(2, 2), name='maxpool3')(actv3)
     pool3 = channel_spatial_squeeze_excite(pool3, init_seed=init_seed)
     pool3 = Dropout(droprate, name='dropout3')(pool3)
-    
+
     # Block4
     n_filters *= growth_factor
     pool3 = BatchNormalization(name='bn3')(pool3)
@@ -82,14 +81,17 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
 
     # Block7
     n_filters //= growth_factor
-    up6_1 = concatenate(
-        [Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up7')(actv5),
-         actv4_1,
-         AveragePooling2D(pool_size=(2, 2))(actv4_0),
-         AveragePooling2D(pool_size=(4, 4))(actv3),
-         AveragePooling2D(pool_size=(8, 8))(actv2),
-         AveragePooling2D(pool_size=(16, 16))(actv1)],
-        name='concat7')
+    up6_1_aux = concatenate([actv4_1,
+                             AveragePooling2D(pool_size=(2, 2))(actv4_0),
+                             AveragePooling2D(pool_size=(4, 4))(actv3),
+                             AveragePooling2D(pool_size=(8, 8))(actv2),
+                             AveragePooling2D(pool_size=(16, 16))(actv1)])
+    up6_1_aux = Conv2D(n_filters, (1, 1), padding='same', kernel_initializer=he_uniform(seed=init_seed),
+                       bias_initializer=he_uniform(seed=init_seed))(up6_1_aux)
+    up6_1_aux = LeakyReLU()(up6_1_aux)
+
+    up6_1 = concatenate([Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up7')(actv5),
+                         up6_1_aux], name='concat7')
     up6_1 = BatchNormalization(name='bn7')(up6_1)
     conv6_1 = Conv2D(n_filters, (3, 3), padding='same', name='conv7_1', kernel_initializer=he_uniform(seed=init_seed),
                      bias_initializer=he_uniform(seed=init_seed))(up6_1)
@@ -102,15 +104,18 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
 
     # Block8
     n_filters //= growth_factor
-    up6_2 = concatenate(
-        [Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up8')(conv6_1),
-         actv4_0,
-         UpSampling2D(size=(2, 2))(actv4_1),
-         UpSampling2D(size=(4, 4))(actv5),
-         AveragePooling2D(pool_size=(2, 2))(actv3),
-         AveragePooling2D(pool_size=(4, 4))(actv2),
-         AveragePooling2D(pool_size=(8, 8))(actv1)],
-        name='concat8')
+    up6_2_aux = concatenate([actv4_0,
+                             UpSampling2D(size=(2, 2), interpolation="bilinear")(actv4_1),
+                             UpSampling2D(size=(4, 4), interpolation="bilinear")(actv5),
+                             AveragePooling2D(pool_size=(2, 2))(actv3),
+                             AveragePooling2D(pool_size=(4, 4))(actv2),
+                             AveragePooling2D(pool_size=(8, 8))(actv1)])
+    up6_2_aux = Conv2D(n_filters, (1, 1), padding='same', kernel_initializer=he_uniform(seed=init_seed),
+                       bias_initializer=he_uniform(seed=init_seed))(up6_2_aux)
+    up6_2_aux = LeakyReLU()(up6_2_aux)
+
+    up6_2 = concatenate([Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up8')(conv6_1),
+                         up6_2_aux], name='concat8')
     up6_2 = BatchNormalization(name='bn8')(up6_2)
     conv6_2 = Conv2D(n_filters, (3, 3), padding='same', name='conv8_1', kernel_initializer=he_uniform(seed=init_seed),
                      bias_initializer=he_uniform(seed=init_seed))(up6_2)
@@ -120,18 +125,21 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
     conv6_2 = LeakyReLU(name='actv8_2')(conv6_2)
     conv6_2 = channel_spatial_squeeze_excite(conv6_2, init_seed=init_seed)
     conv6_2 = Dropout(droprate, name='dropout8')(conv6_2)
-    
+
     # Block9
     n_filters //= growth_factor
-    up7 = concatenate(
-        [Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up9')(conv6_2),
-         actv3,
-         UpSampling2D(size=(2, 2))(actv4_0),
-         UpSampling2D(size=(4, 4))(actv4_1),
-         UpSampling2D(size=(8, 8))(actv5),
-         AveragePooling2D(pool_size=(2, 2))(actv2),
-         AveragePooling2D(pool_size=(4, 4))(actv1)],
-        name='concat9')
+    up7_aux = concatenate([actv3,
+                           UpSampling2D(size=(2, 2), interpolation="bilinear")(actv4_0),
+                           UpSampling2D(size=(4, 4), interpolation="bilinear")(actv4_1),
+                           UpSampling2D(size=(8, 8), interpolation="bilinear")(actv5),
+                           AveragePooling2D(pool_size=(2, 2))(actv2),
+                           AveragePooling2D(pool_size=(4, 4))(actv1)])
+    up7_aux = Conv2D(n_filters, (1, 1), padding='same', kernel_initializer=he_uniform(seed=init_seed),
+                     bias_initializer=he_uniform(seed=init_seed))(up7_aux)
+    up7_aux = LeakyReLU()(up7_aux)
+
+    up7 = concatenate([Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up9')(conv6_2),
+                       up7_aux], name='concat9')
     up7 = BatchNormalization(name='bn9')(up7)
     conv7 = Conv2D(n_filters, (3, 3), padding='same', name='conv9_1', kernel_initializer=he_uniform(seed=init_seed),
                    bias_initializer=he_uniform(seed=init_seed))(up7)
@@ -141,18 +149,21 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
     conv7 = LeakyReLU(name='actv9_2')(conv7)
     conv7 = channel_spatial_squeeze_excite(conv7, init_seed=init_seed)
     conv7 = Dropout(droprate, name='dropout9')(conv7)
-    
+
     # Block10
     n_filters //= growth_factor
-    up8 = concatenate(
-        [Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up10')(conv7),
-         actv2,
-         UpSampling2D(size=(2, 2))(actv3),
-         UpSampling2D(size=(4, 4))(actv4_0),
-         UpSampling2D(size=(8, 8))(actv4_1),
-         UpSampling2D(size=(16, 16))(actv5),
-         AveragePooling2D(pool_size=(2, 2))(actv1)],
-        name='concat10')
+    up8_aux = concatenate([actv2,
+                           UpSampling2D(size=(2, 2), interpolation="bilinear")(actv3),
+                           UpSampling2D(size=(4, 4), interpolation="bilinear")(actv4_0),
+                           UpSampling2D(size=(8, 8), interpolation="bilinear")(actv4_1),
+                           UpSampling2D(size=(16, 16), interpolation="bilinear")(actv5),
+                           AveragePooling2D(pool_size=(2, 2))(actv1)])
+    up8_aux = Conv2D(n_filters, (1, 1), padding='same', kernel_initializer=he_uniform(seed=init_seed),
+                     bias_initializer=he_uniform(seed=init_seed))(up8_aux)
+    up8_aux = LeakyReLU()(up8_aux)
+
+    up8 = concatenate([Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up10')(conv7),
+                       up8_aux], name='concat10')
     up8 = BatchNormalization(name='bn10')(up8)
     conv8 = Conv2D(n_filters, (3, 3), padding='same', name='conv10_1', kernel_initializer=he_uniform(seed=init_seed),
                    bias_initializer=he_uniform(seed=init_seed))(up8)
@@ -162,18 +173,21 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
     conv8 = LeakyReLU(name='actv10_2')(conv8)
     conv8 = channel_spatial_squeeze_excite(conv8, init_seed=init_seed)
     conv8 = Dropout(droprate, name='dropout10')(conv8)
-    
+
     # Block11
     n_filters //= growth_factor
-    up9 = concatenate(
-        [Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up11')(conv8),
-         actv1,
-         UpSampling2D(size=(2, 2))(actv2),
-         UpSampling2D(size=(4, 4))(actv3),
-         UpSampling2D(size=(8, 8))(actv4_0),
-         UpSampling2D(size=(16, 16))(actv4_1),
-         UpSampling2D(size=(32, 32))(actv5)],
-        name='concat11')
+    up9_aux = concatenate([actv1,
+                           UpSampling2D(size=(2, 2), interpolation="bilinear")(actv2),
+                           UpSampling2D(size=(4, 4), interpolation="bilinear")(actv3),
+                           UpSampling2D(size=(8, 8), interpolation="bilinear")(actv4_0),
+                           UpSampling2D(size=(16, 16), interpolation="bilinear")(actv4_1),
+                           UpSampling2D(size=(32, 32), interpolation="bilinear")(actv5)])
+    up9_aux = Conv2D(n_filters, (1, 1), padding='same', kernel_initializer=he_uniform(seed=init_seed),
+                     bias_initializer=he_uniform(seed=init_seed))(up9_aux)
+    up9_aux = LeakyReLU()(up9_aux)
+
+    up9 = concatenate([Conv2DTranspose(n_filters, (2, 2), strides=(2, 2), padding='same', name='up11')(conv8),
+                       up9_aux], name='concat11')
     conv9 = Conv2D(n_filters, (3, 3), padding='same', name='conv11_1', kernel_initializer=he_uniform(seed=init_seed),
                    bias_initializer=he_uniform(seed=init_seed))(up9)
     actv9 = LeakyReLU(name='actv11_1')(conv9)

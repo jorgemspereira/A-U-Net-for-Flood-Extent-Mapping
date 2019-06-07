@@ -209,7 +209,7 @@ def convert(path_original, path_goal, dataset_type, max_range):
             new_img = np.dstack((new_img, img_as_float(img[:, :, 3])))
             p2, p98 = np.percentile(new_img[:, :, 3], (2, 98))
             new_img[:, :, 3] = (1.0 + exposure.rescale_intensity(new_img[:, :, 3], in_range=(p2, p98))) / 2.0
-            new_img = np.dstack((new_img, get_other_relevant_files_for_id(f.split(".")[0], dataset_type, index)))
+            #  new_img = np.dstack((new_img, get_other_relevant_files_for_id(f.split(".")[0], dataset_type, index)))
             tiff.imsave(new_path + f, new_img)
 
 

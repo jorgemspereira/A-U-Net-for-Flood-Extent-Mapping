@@ -13,7 +13,7 @@ def get_mask(path):
     return imageio.imread(path)
 
 
-def get_rand_patch(img, mask):
+def get_rand_transformation(img, mask):
     patch_img, patch_mask = img, mask
     random_transformation = np.random.randint(1, 6)
 
@@ -38,7 +38,7 @@ def get_rand_patch(img, mask):
     return patch_img, patch_mask
 
 
-def image_generator(path_input, path_mask, batch_size=5, random_transformation=False, shuffle=True):
+def image_generator(path_input, path_mask, patch_size, batch_size=5, random_transformation=False, shuffle=True):
     ids_file_all = path_input[:]
     ids_mask_all = path_mask[:]
     while True:
@@ -50,11 +50,11 @@ def image_generator(path_input, path_mask, batch_size=5, random_transformation=F
         while total_patches < batch_size:
             index = 0
             if shuffle: index = randint(1, len(ids_file_all) - 1) if len(ids_file_all) != 1 else 0
-            img = get_input(ids_file_all.pop(index))
-            mask = get_mask(ids_mask_all.pop(index))
-            if random_transformation: img, mask = get_rand_patch(img, mask)
+            img_id, mask_id = ids_file_all.pop(index), ids_mask_all.pop(index)
+            img, mask = get_input(img_id), get_mask(mask_id)
+            if random_transformation: img, mask = get_rand_transformation(img, mask)
             mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
             x.append(img)
-            y.append(mask.reshape((320, 320, 1)))
+            y.append(mask.reshape((patch_size, patch_size, 1)))
             total_patches += 1
         yield (np.array(x), np.array(y))
