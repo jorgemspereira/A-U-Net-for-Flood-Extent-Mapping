@@ -4,7 +4,6 @@ from itertools import product
 
 import imageio
 import numpy as np
-import pydensecrf.densecrf as dcrf
 import tensorflow as tf
 import tifffile as tiff
 from keras import losses
@@ -36,6 +35,7 @@ SEED = 1234
 
 ORIGI_SZ = 320
 PATCH_SZ = 64
+STEP_SZ = 16
 BATCH_SIZE = 64
 
 WEIGHTS_PATH = 'weights_unet'
@@ -55,7 +55,6 @@ base_path = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-Sensing-Dat
 
 path_train_images_template = '{}/dataset/devset_0{}_satellite_images_patches/'
 path_train_masks_template = "{}/dataset/devset_0{}_segmentation_masks_patches/"
-path_original_test_images_template = '{}/flood-data/testset_0{}_satellite_images/'
 
 path_test_images_template = '{}/dataset/testset_0{}_satellite_images/'
 path_test_masks_template = "{}/flood-data/testset_0{}_segmentation_masks/"
@@ -78,23 +77,11 @@ def get_files(path_images, path_masks, min_range=1, max_range=7):
     return files_input, masks_input
 
 
-def get_original_images(path, min_range=1, max_range=7):
-    files = []
-
-    for index in range(min_range, max_range):
-        complete_path = path.format(base_path, index)
-        files.extend([complete_path + x for x in os.listdir(complete_path) if not x.startswith("._")])
-
-    files.sort(key=lambda x: x.split("/")[-1])
-
-    return files
-
-
 def get_callbacks():
     return [
-        EarlyStopping(monitor='val_loss', restore_best_weights=True, verbose=1, patience=10, mode='auto'),
+        EarlyStopping(monitor='val_loss', restore_best_weights=True, verbose=1, patience=5, mode='auto'),
         ModelCheckpoint(WEIGHTS_PATH, monitor='val_loss', verbose=1, save_best_only=True, mode='auto'),
-        ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1, mode='auto')
+        ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2, verbose=1, mode='auto')
     ]
 
 
@@ -147,30 +134,6 @@ def replace_zeroes(data):
     return data
 
 
-def post_processing(img, output_probs):
-    h, w = output_probs.shape[0], output_probs.shape[1]
-    output_probs = replace_zeroes(output_probs)
-
-    output_probs = np.expand_dims(output_probs, 0)
-    output_probs = np.append(1 - output_probs, output_probs, axis=0)
-
-    d = dcrf.DenseCRF2D(w, h, 2)
-    U = -np.log(output_probs)
-    U = U.reshape((2, -1))
-    U = np.ascontiguousarray(U)
-    U = U.astype(np.float32)
-    img = np.ascontiguousarray(img)
-
-    d.setUnaryEnergy(U)
-    d.addPairwiseGaussian(sxy=2, compat=3)
-    d.addPairwiseBilateral(sxy=10, srgb=60, rgbim=img.astype(np.uint8), compat=10)
-
-    Q = d.inference(5)
-    Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
-
-    return Q
-
-
 def reconstruct_patches(patches, image_size, step):
     i_h, i_w = image_size[:2]
     p_h, p_w = patches.shape[1:3]
@@ -187,28 +150,22 @@ def reconstruct_patches(patches, image_size, step):
     return img / patch_count
 
 
-def predict_aux(x, model, step=32):
+def predict_aux(x, model):
     dim_x, dim_y, dim = x.shape
-    patches = patchify(x, (PATCH_SZ, PATCH_SZ, N_BANDS), step=step)
+    patches = patchify(x, (PATCH_SZ, PATCH_SZ, N_BANDS), step=STEP_SZ)
     width_window, height_window, z, width_x, height_y, num_channel = patches.shape
     patches = np.reshape(patches, (width_window * height_window,  width_x, height_y, num_channel))
     predictions = model.predict(patches, batch_size=width_window * height_window)
-    return reconstruct_patches(predictions, (dim_x, dim_y, N_CLASSES), step)
+    return reconstruct_patches(predictions, (dim_x, dim_y, N_CLASSES), STEP_SZ)
 
 
-def calculate_results_aux(model, x, y, original_images, dcrf=False):
+def calculate_results_aux(model, x, y):
     results = []
     for index in tqdm(range(0, len(x))):
         pred = predict_aux(tiff.imread(x[index]), model)
+        result = np.where(pred.reshape((ORIGI_SZ, ORIGI_SZ)) < 0.5, 0, 1)
+
         mask = imageio.imread(y[index])
-
-        if dcrf:
-            original_image = tiff.imread(original_images[index])
-            original_image = original_image[:, :, 0:3]
-            result = post_processing(original_image, pred)
-        else:
-            result = np.where(pred.reshape((ORIGI_SZ, ORIGI_SZ)) < 0.5, 0, 1)
-
         name_image = y[index].split("_")[-1].split(".")[0]
         score = jaccard_similarity_score(mask, result)
 
@@ -227,13 +184,11 @@ def calculate_results_aux(model, x, y, original_images, dcrf=False):
 def calculate_results(model):
     print("Calculating results...")
 
-    original_images = get_original_images(path_original_test_images_template)
     x, y = get_files(path_test_images_template, path_test_masks_template)
-    print("Same locations --------> {}".format(calculate_results_aux(model, x, y, original_images, dcrf=False)))
+    print("Same locations --------> {}".format(calculate_results_aux(model, x, y)))
 
-    original_images = get_original_images(path_original_test_images_template, min_range=7, max_range=8)
     x, y = get_files(path_test_images_template, path_test_masks_template, min_range=7, max_range=8)
-    print("Different locations ---> {}".format(calculate_results_aux(model, x, y, original_images, dcrf=False)))
+    print("Different locations ---> {}".format(calculate_results_aux(model, x, y)))
 
 
 # noinspection PyTypeChecker

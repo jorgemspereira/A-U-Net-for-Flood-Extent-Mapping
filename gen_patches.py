@@ -16,6 +16,7 @@ new_path_train_masks = '{}/dataset/devset_0{}_segmentation_masks_patches/'
 
 PATCH_SZ = 64
 BANDS_SZ = 4
+STEP_SZ = 16
 
 
 def verify_folder(folder):
@@ -46,8 +47,8 @@ def create_patches(file_path_original, file_path_goal, mask_path_original, mask_
             img = tiff.imread(file_path + files[idx])
             mask = imageio.imread(mask_file_path + masks[idx])
 
-            img_patches = patchify(img, (PATCH_SZ, PATCH_SZ, BANDS_SZ), step=32)
-            mask_patches = patchify(mask, (PATCH_SZ, PATCH_SZ), step=32)
+            img_patches = patchify(img, (PATCH_SZ, PATCH_SZ, BANDS_SZ), step=STEP_SZ)
+            mask_patches = patchify(mask, (PATCH_SZ, PATCH_SZ), step=STEP_SZ)
 
             counter = 0
             for x in img_patches:
