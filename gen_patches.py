@@ -23,8 +23,8 @@ def verify_folder(folder):
         os.makedirs(folder)
 
 
-def create_patches(file_path_original, file_path_goal, mask_path_original, mask_path_goal, max_range=7):
-    for index in range(1, max_range):
+def create_patches(file_path_original, file_path_goal, mask_path_original, mask_path_goal):
+    for index in range(1, 7):
 
         file_path = file_path_original.format(base_path, index)
         file_new_path = file_path_goal.format(base_path, index)
@@ -46,8 +46,8 @@ def create_patches(file_path_original, file_path_goal, mask_path_original, mask_
             img = tiff.imread(file_path + files[idx])
             mask = imageio.imread(mask_file_path + masks[idx])
 
-            img_patches = patchify(img, (64, 64, 4), step=32)
-            mask_patches = patchify(mask, (64, 64), step=32)
+            img_patches = patchify(img, (PATCH_SZ, PATCH_SZ, BANDS_SZ), step=32)
+            mask_patches = patchify(mask, (PATCH_SZ, PATCH_SZ), step=32)
 
             counter = 0
             for x in img_patches:
