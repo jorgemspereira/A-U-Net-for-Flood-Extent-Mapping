@@ -38,14 +38,23 @@ def get_rand_transformation(img, mask):
     return patch_img, patch_mask
 
 
-def image_generator(path_input, path_mask, patch_size, batch_size=5, random_transformation=False, shuffle=True):
+def calculate_weight(img_id, weights):
+    if weights is not None:
+        index = img_id.find("devset_0")
+        value = weights[int(img_id[index + 8:index + 9]) - 1]
+        return value
+    return 1
+
+
+def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=5,
+                    random_transformation=False, shuffle=True):
     ids_file_all = path_input[:]
     ids_mask_all = path_mask[:]
     while True:
         if len(ids_file_all) < batch_size:
             ids_file_all = path_input[:]
             ids_mask_all = path_mask[:]
-        x, y = list(), list()
+        x, y, weights_res = list(), list(), list()
         total_patches = 0
         while total_patches < batch_size:
             index = 0
@@ -56,5 +65,6 @@ def image_generator(path_input, path_mask, patch_size, batch_size=5, random_tran
             mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
             x.append(img)
             y.append(mask.reshape((patch_size, patch_size, 1)))
+            weights_res.append(calculate_weight(img_id, weights))
             total_patches += 1
-        yield (np.array(x), np.array(y))
+        yield (np.array(x), np.array(y), np.array(weights_res))

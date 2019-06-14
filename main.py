@@ -14,7 +14,7 @@ from keras.preprocessing import image
 from numpy.random import seed
 from patchify import patchify
 from segmentation_models.metrics import iou_score
-from sklearn.metrics import jaccard_similarity_score
+from sklearn.metrics import jaccard_similarity_score, accuracy_score
 from sklearn.model_selection import train_test_split
 from tensorflow import set_random_seed
 from tqdm import tqdm
@@ -34,9 +34,9 @@ N_EPOCHS = 100
 SEED = 1234
 
 ORIGI_SZ = 320
-PATCH_SZ = 64
+PATCH_SZ = 128
 STEP_SZ = 16
-BATCH_SIZE = 64
+BATCH_SIZE = 16
 
 WEIGHTS_PATH = 'weights_unet'
 
@@ -89,14 +89,26 @@ def custom_loss(y_true, y_pred):
     return keras_lovasz_hinge(y_true, y_pred) + losses.binary_crossentropy(y_true, y_pred)
 
 
+def calculate_weights(x_train):
+    result = []
+    for index in range(1, 7):
+        result.append(sum([1 for el in x_train if "devset_0{}".format(index) in el]))
+
+    result = [((x * 100) / sum(result)) for x in result]
+    result = [(100 - x) / 100 for x in result]
+
+    return result
+
+
 def train_net():
     x, y = get_files(path_train_images_template, path_train_masks_template)
     x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=0.15, random_state=SEED)
 
     train_steps = len(x_train) // BATCH_SIZE
     validation_steps = len(x_val) // BATCH_SIZE
+    weights = calculate_weights(x_train)
 
-    train_gen = image_generator(x_train, y_train, PATCH_SZ, batch_size=BATCH_SIZE, random_transformation=True)
+    train_gen = image_generator(x_train, y_train, PATCH_SZ, weights, batch_size=BATCH_SIZE, random_transformation=True)
     val_gen = image_generator(x_val, y_val, PATCH_SZ, batch_size=BATCH_SIZE, shuffle=False, random_transformation=False)
 
     model = unet_model(n_classes=N_CLASSES, init_seed=SEED, im_sz=PATCH_SZ, n_channels=N_BANDS)
@@ -128,12 +140,6 @@ def picture_from_mask(mask):
     return np.moveaxis(pict, 0, -1)
 
 
-def replace_zeroes(data):
-    min_non_zero = np.min(data[np.nonzero(data)])
-    data[data == 0] = min_non_zero
-    return data
-
-
 def reconstruct_patches(patches, image_size, step):
     i_h, i_w = image_size[:2]
     p_h, p_w = patches.shape[1:3]
@@ -155,19 +161,20 @@ def predict_aux(x, model):
     patches = patchify(x, (PATCH_SZ, PATCH_SZ, N_BANDS), step=STEP_SZ)
     width_window, height_window, z, width_x, height_y, num_channel = patches.shape
     patches = np.reshape(patches, (width_window * height_window,  width_x, height_y, num_channel))
-    predictions = model.predict(patches, batch_size=width_window * height_window)
+    predictions = model.predict(patches, batch_size=20)
     return reconstruct_patches(predictions, (dim_x, dim_y, N_CLASSES), STEP_SZ)
 
 
 def calculate_results_aux(model, x, y):
-    results = []
+    results_iou, results_acc = [], []
     for index in tqdm(range(0, len(x))):
         pred = predict_aux(tiff.imread(x[index]), model)
         result = np.where(pred.reshape((ORIGI_SZ, ORIGI_SZ)) < 0.5, 0, 1)
 
         mask = imageio.imread(y[index])
         name_image = y[index].split("_")[-1].split(".")[0]
-        score = jaccard_similarity_score(mask, result)
+        score_iou = jaccard_similarity_score(mask, result)
+        score_acc = accuracy_score(mask.ravel(), result.ravel())
 
         img = image.array_to_img(picture_from_mask(mask))
         img.save('./results/{}_original.jpg'.format(name_image))
@@ -175,20 +182,38 @@ def calculate_results_aux(model, x, y):
         img = image.array_to_img(picture_from_mask(result))
         img.save('./results/{}_predicted.jpg'.format(name_image))
 
-        # print("{} -> {}".format(y[index], score))
-        results.append(score)
+        # location = y[index].find("testset_0")
+        # location = int(y[index][location + 9:location + 10])
 
-    return np.mean(results)
+        # try:
+        #     results_iou[location] += [score_iou]
+        # except KeyError:
+        #     results_iou[location] = [score_iou]
+        #
+        # try:
+        #     results_acc[location] += [score_acc]
+        # except KeyError:
+        #     results_acc[location] = [score_acc]
+
+        results_iou.append(score_iou)
+        results_acc.append(score_acc)
+
+    # results_acc = [np.mean(value) for value in results_acc.values()]
+    # results_iou = [np.mean(value) for value in results_iou.values()]
+
+    return np.mean(results_acc), np.mean(results_iou)
 
 
 def calculate_results(model):
     print("Calculating results...")
 
     x, y = get_files(path_test_images_template, path_test_masks_template)
-    print("Same locations --------> {}".format(calculate_results_aux(model, x, y)))
+    accuracy, iou = calculate_results_aux(model, x, y)
+    print("Same locations --------> Acc: {} | IOU: {}".format(accuracy, iou))
 
     x, y = get_files(path_test_images_template, path_test_masks_template, min_range=7, max_range=8)
-    print("Different locations ---> {}".format(calculate_results_aux(model, x, y)))
+    accuracy, iou = calculate_results_aux(model, x, y)
+    print("Different locations ---> Acc: {} | IOU: {}".format(accuracy, iou))
 
 
 # noinspection PyTypeChecker
