@@ -20,6 +20,7 @@ project
 │   │    devset_01_gdacs_water_and_magnitude
 │   │    devset_01_imperviousness
 │   │    devset_01_NVDI
+│   │    devset_01_NDWI
 │   │    devset_01_satellite_images
 │   │    devset_01_segmentation_masks
 │   │    devset_01_elevation_and_slope
