@@ -1,5 +1,3 @@
-from random import randint
-
 import imageio
 import numpy as np
 import tifffile as tiff
@@ -13,9 +11,9 @@ def get_mask(path):
     return imageio.imread(path)
 
 
-def get_rand_transformation(img, mask):
+def get_random_transformation(img, mask):
     patch_img, patch_mask = img, mask
-    random_transformation = np.random.randint(1, 6)
+    random_transformation = np.random.randint(1, 4)
 
     # reverse first dimension
     if random_transformation == 1:
@@ -26,14 +24,6 @@ def get_rand_transformation(img, mask):
     elif random_transformation == 2:
         patch_img = img[:, ::-1, :]
         patch_mask = mask[:, ::-1]
-
-    elif random_transformation == 3:
-        patch_img = img.transpose(1, 0, 2)
-        patch_mask = mask.T
-
-    elif random_transformation == 4:
-        patch_img = img[::-1, ::-1, :].transpose(1, 0, 2)
-        patch_mask = mask[::-1, ::-1].T
 
     return patch_img, patch_mask
 
@@ -58,10 +48,10 @@ def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=
         total_patches = 0
         while total_patches < batch_size:
             index = 0
-            if shuffle: index = randint(1, len(ids_file_all) - 1) if len(ids_file_all) != 1 else 0
+            if shuffle: index = np.random.randint(1, len(ids_file_all) - 1) if len(ids_file_all) != 1 else 0
             img_id, mask_id = ids_file_all.pop(index), ids_mask_all.pop(index)
             img, mask = get_input(img_id), get_mask(mask_id)
-            if random_transformation: img, mask = get_rand_transformation(img, mask)
+            if random_transformation: img, mask = get_random_transformation(img, mask)
             mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
             x.append(img)
             y.append(mask.reshape((patch_size, patch_size, 1)))
