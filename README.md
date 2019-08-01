@@ -9,11 +9,11 @@ deep learning library (combined with [scikit-learn](https://scikit-learn.org/sta
 
 ```
 @article{Ronneberger2015UNetCN,
-  title={U-Net: Convolutional Networks for Biomedical Image Segmentation},
-  author={Olaf Ronneberger and Philipp Fischer and Thomas Brox},
-  journal={ArXiv},
-  year={2015},
-  volume={abs/1505.04597}
+  title   = {U-Net: Convolutional Networks for Biomedical Image Segmentation},
+  author  = {Olaf Ronneberger and Philipp Fischer and Thomas Brox},
+  journal = {ArXiv},
+  year    = {2015},
+  volume  = {abs/1505.04597}
 }
 ```
 
