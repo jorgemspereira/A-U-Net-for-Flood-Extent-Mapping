@@ -1,9 +1,21 @@
 # A U-Net Model Leveraging Multiple Remote Sensing Data Sources for Flood Extent Mapping
 
-This repository contains the implementation for a U-Net model that leverages multiple remote sensing data
+This repository contains the implementation for a U-Net (Ronneberg et al. 2015) model that leverages multiple remote sensing data
 for flood extent mapping using the dataset from the FDSI sub-task from the Multimedia Satellite Task of the 
-MediaEval 2017. The presented implementation uses the [keras.io](http://keras.io/) deep learning library 
-(combined with [scikit-learn](https://scikit-learn.org/stable/), and other machine learning libraries). 
+MediaEval 2017. The presented U-Met leverages a dense connectivity pattern (removing the need for distant 
+layers to re-learn redundant feature maps) and Channel and Spatial Squeeze and Excite blocks 
+(re-calibrating the learned feature maps adaptively). The presented implementation uses the [keras.io](http://keras.io/) 
+deep learning library (combined with [scikit-learn](https://scikit-learn.org/stable/), and other machine learning libraries). 
+
+```
+@article{Ronneberger2015UNetCN,
+  title={U-Net: Convolutional Networks for Biomedical Image Segmentation},
+  author={Olaf Ronneberger and Philipp Fischer and Thomas Brox},
+  journal={ArXiv},
+  year={2015},
+  volume={abs/1505.04597}
+}
+```
 
 ### Files needed not in this repository
 
