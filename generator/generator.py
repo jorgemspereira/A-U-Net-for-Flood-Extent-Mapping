@@ -28,23 +28,36 @@ def apply_lut(content, table, patch_sz):
     return (np.array(res) / 65535).reshape((patch_sz, patch_sz))
 
 
+def get_incr_lut():
+    global result_incr_lut
+    try:
+        return result_incr_lut
+    except NameError:
+        result_incr_lut = create_lut([0, rescale(64), rescale(128), rescale(192), rescale(256)],
+                                     [0, rescale(70), rescale(140), rescale(210), rescale(256)])
+        return result_incr_lut
+
+
+def get_decr_lut():
+    global result_decr_lut
+    try:
+        return result_decr_lut
+    except NameError:
+        result_decr_lut = create_lut([0, rescale(64), rescale(128), rescale(192), rescale(256)],
+                                     [0, rescale(30), rescale(80), rescale(120), rescale(192)])
+        return result_decr_lut
+
+
 def change_temperature(img, mode, patch_size):
-
-    incr_ch_lut = create_lut([0, rescale(64), rescale(128), rescale(192), rescale(256)],
-                             [0, rescale(70), rescale(140), rescale(210), rescale(256)])
-
-    decr_ch_lut = create_lut([0, rescale(64), rescale(128), rescale(192), rescale(256)],
-                             [0, rescale(30), rescale(80), rescale(120), rescale(192)])
-
     c_r, c_g, c_b = img[:, :, 0], img[:, :, 1], img[:, :, 2]
 
     if mode == "warm":
-        c_r = apply_lut(c_r, incr_ch_lut, patch_size)
-        c_b = apply_lut(c_b, decr_ch_lut, patch_size)
+        c_r = apply_lut(c_r, get_incr_lut(), patch_size)
+        c_b = apply_lut(c_b, get_decr_lut(), patch_size)
 
     elif mode == "cold":
-        c_r = apply_lut(c_r, decr_ch_lut, patch_size)
-        c_b = apply_lut(c_b, incr_ch_lut, patch_size)
+        c_r = apply_lut(c_r, get_decr_lut(), patch_size)
+        c_b = apply_lut(c_b, get_incr_lut(), patch_size)
 
     else:
         raise ValueError("Mode should be equal to warm or cold.")
@@ -54,7 +67,7 @@ def change_temperature(img, mode, patch_size):
 
 def get_random_transformation(img, mask, patch_size):
     patch_img, patch_mask = img, mask
-    random_transformation = np.random.randint(1, 8)
+    random_transformation = np.random.randint(1, 4)
 
     # reverse first dimension
     if random_transformation == 1:
@@ -66,11 +79,15 @@ def get_random_transformation(img, mask, patch_size):
         patch_img = img[:, ::-1, :]
         patch_mask = mask[:, ::-1]
 
-    elif random_transformation == 3:
-        patch_img = change_temperature(img, "warm", patch_size)
+    random_transformation = np.random.randint(1, 4)
 
-    elif random_transformation == 4:
-        patch_img = change_temperature(img, "cold", patch_size)
+    # warmer colors in image
+    if random_transformation == 1:
+        patch_img = change_temperature(patch_img, "warm", patch_size)
+
+    # colder colors in image
+    elif random_transformation == 2:
+        patch_img = change_temperature(patch_img, "cold", patch_size)
 
     return patch_img, patch_mask
 
