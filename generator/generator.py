@@ -1,4 +1,3 @@
-import imageio
 import numpy as np
 import tifffile as tiff
 from scipy.interpolate import UnivariateSpline
@@ -9,7 +8,7 @@ def get_input(path):
 
 
 def get_mask(path):
-    return imageio.imread(path)
+    return tiff.imread(path)
 
 
 def create_lut(x, y):
@@ -22,9 +21,9 @@ def rescale(value):
 
 
 def apply_lut(content, table, patch_sz):
-    res = []
-    for el in np.nditer(content):
-        res.append(table[int(round(el * 65535))])
+    prev_content, res = (content * 65535), []
+    for el in np.nditer(prev_content):
+        res.append(table[int(el)])
     return (np.array(res) / 65535).reshape((patch_sz, patch_sz))
 
 
@@ -35,7 +34,7 @@ def get_incr_lut():
     except NameError:
         result_incr_lut = create_lut([0, rescale(64), rescale(128), rescale(192), rescale(256)],
                                      [0, rescale(70), rescale(140), rescale(210), rescale(256)])
-        return result_incr_lut
+        return dict(zip(list(range(len(result_incr_lut))), result_incr_lut))
 
 
 def get_decr_lut():
@@ -45,7 +44,7 @@ def get_decr_lut():
     except NameError:
         result_decr_lut = create_lut([0, rescale(64), rescale(128), rescale(192), rescale(256)],
                                      [0, rescale(30), rescale(80), rescale(120), rescale(192)])
-        return result_decr_lut
+        return dict(zip(list(range(len(result_decr_lut))), result_decr_lut))
 
 
 def change_temperature(img, mode, patch_size):
@@ -67,19 +66,19 @@ def change_temperature(img, mode, patch_size):
 
 def get_random_transformation(img, mask, patch_size):
     patch_img, patch_mask = img, mask
-    random_transformation = np.random.randint(1, 4)
+    random_transformation = np.random.randint(1, 8)
 
     # reverse first dimension
     if random_transformation == 1:
         patch_img = img[::-1, :, :]
-        patch_mask = mask[::-1, :]
+        patch_mask = mask[::-1, :, :]
 
     # reverse second dimension
     elif random_transformation == 2:
         patch_img = img[:, ::-1, :]
-        patch_mask = mask[:, ::-1]
+        patch_mask = mask[:, ::-1, :]
 
-    random_transformation = np.random.randint(1, 4)
+    random_transformation = np.random.randint(1, 8)
 
     # warmer colors in image
     if random_transformation == 1:
@@ -108,7 +107,7 @@ def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=
         if len(ids_file_all) < batch_size:
             ids_file_all = path_input[:]
             ids_mask_all = path_mask[:]
-        x, y, weights_res = list(), list(), list()
+        x, y, weights_res, weights_map = list(), list(), list(), list()
         total_patches = 0
         while total_patches < batch_size:
             index = 0
@@ -118,7 +117,8 @@ def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=
             if random_transformation: img, mask = get_random_transformation(img, mask, patch_size)
             mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
             x.append(img)
-            y.append(mask.reshape((patch_size, patch_size, 1)))
+            y.append(mask[:, :, 0].reshape((patch_size, patch_size, 1)))
+            weights_map.append(mask[:, :, 1].reshape((patch_size, patch_size, 1)))
             weights_res.append(calculate_weight(img_id, weights))
             total_patches += 1
-        yield (np.array(x), np.array(y), np.array(weights_res))
+        yield ([np.array(x), np.array(weights_map)], np.array(y), np.array(weights_res))

@@ -4,8 +4,8 @@ import numpy as np
 import tifffile as tiff
 from tqdm import tqdm
 
-base_path = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-Sensing-Data-Sources-for-Flood-Extent-Mapping'
 
+base_path = '/tmp'
 
 new_path_train_images = '{}/dataset/devset_0{}_satellite_images/'
 new_path_test_images = '{}/dataset/testset_0{}_satellite_images/'
@@ -134,9 +134,9 @@ def scale(extremes, features):
 def get_other_relevant_files_for_id(id, dataset_type, index):
     paths = get_other_paths(dataset_type, index)
 
-    elevation_extremes = get_elevation_extremes()
-    elevation = tiff.imread([paths[0] + x for x in os.listdir(paths[0]) if x.startswith("elevation_" + id)][0])
-    elevation = scale(elevation_extremes, elevation)
+    # elevation_extremes = get_elevation_extremes()
+    # elevation = tiff.imread([paths[0] + x for x in os.listdir(paths[0]) if x.startswith("elevation_" + id)][0])
+    # elevation = scale(elevation_extremes, elevation)
 
     imperviousness_extremes = get_imperviousness_extremes()
     imperviousness = tiff.imread([paths[1] + x for x in os.listdir(paths[1]) if x.startswith(id)][0])
@@ -150,7 +150,7 @@ def get_other_relevant_files_for_id(id, dataset_type, index):
     ndwi = tiff.imread([paths[3] + x for x in os.listdir(paths[3]) if x.startswith(id)][0])
     ndwi = scale(ndwi_extremes, ndwi)
 
-    return np.dstack((elevation, imperviousness, ndvi, ndwi))
+    return np.dstack((ndvi, ndwi, imperviousness))
 
 
 def convert(path_original, path_goal, dataset_type, max_range):
@@ -163,7 +163,7 @@ def convert(path_original, path_goal, dataset_type, max_range):
         for f in tqdm(files):
             img = tiff.imread(path + f)
             new_img = img / 65535
-            # new_img = np.dstack((new_img, get_other_relevant_files_for_id(f.split(".")[0], dataset_type, index)))
+            new_img = np.dstack((new_img, get_other_relevant_files_for_id(f.split(".")[0], dataset_type, index)))
             tiff.imsave(new_path + f, new_img)
 
 

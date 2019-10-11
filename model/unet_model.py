@@ -38,7 +38,7 @@ def conv2d_super_block(input_tensor, n_filters, init_seed=None):
 
 
 def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_start=32, growth_factor=2, droprate=0.5):
-    inputs = Input((im_sz, im_sz, n_channels))
+    inputs = Input((im_sz, im_sz, n_channels), name="input_layer")
 
     # Block1
     n_filters = n_filters_start
@@ -163,6 +163,7 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
     conv11 = conv2d_super_block(conv11, n_filters, init_seed=init_seed)
     conv11 = channel_spatial_squeeze_excite(conv11, init_seed=init_seed)
 
-    conv11 = Conv2D(n_classes, (1, 1), activation='sigmoid')(conv11)
+    weights = Input((im_sz, im_sz, 1))
+    conv11 = Conv2D(n_classes, (1, 1), activation='sigmoid', name="output_layer")(conv11)
 
-    return Model(inputs=inputs, outputs=conv11)
+    return Model(inputs=[inputs, weights], outputs=concatenate([conv11, weights]))

@@ -1,12 +1,15 @@
 import os
 
 import imageio
+from scipy import ndimage
 from tqdm import tqdm
 from patchify import patchify
 
+import numpy as np
 import tifffile as tiff
 
-base_path = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-Sensing-Data-Sources-for-Flood-Extent-Mapping'
+
+base_path = '/tmp'
 
 path_train_images = '{}/dataset/devset_0{}_satellite_images/'
 path_train_masks = '{}/flood-data/devset_0{}_segmentation_masks/'
@@ -15,7 +18,7 @@ new_path_train_images = '{}/dataset/devset_0{}_satellite_images_patches/'
 new_path_train_masks = '{}/dataset/devset_0{}_segmentation_masks_patches/'
 
 PATCH_SZ = 128
-BANDS_SZ = 4
+BANDS_SZ = 7
 STEP_SZ = 16
 
 
@@ -24,14 +27,23 @@ def verify_folder(folder):
         os.makedirs(folder)
 
 
-def create_patches(file_path_original, file_path_goal, mask_path_original, mask_path_goal):
+def get_distance(f):
+    f = f != 1.0
+
+    dist_func = ndimage.distance_transform_edt
+    distance = np.where(f, dist_func(f), -(dist_func(1-f)))
+
+    return distance
+
+
+def main():
     for index in range(1, 7):
 
-        file_path = file_path_original.format(base_path, index)
-        file_new_path = file_path_goal.format(base_path, index)
+        file_path = path_train_images.format(base_path, index)
+        file_new_path = new_path_train_images.format(base_path, index)
 
-        mask_file_path = mask_path_original.format(base_path, index)
-        mask_file_new_path = mask_path_goal.format(base_path, index)
+        mask_file_path = path_train_masks.format(base_path, index)
+        mask_file_new_path = new_path_train_masks.format(base_path, index)
 
         verify_folder(file_new_path)
         verify_folder(mask_file_new_path)
@@ -44,6 +56,7 @@ def create_patches(file_path_original, file_path_goal, mask_path_original, mask_
 
         for idx in tqdm(range(0, len(files))):
             img_id = files[idx].split(".")[0]
+
             img = tiff.imread(file_path + files[idx])
             mask = imageio.imread(mask_file_path + masks[idx])
 
@@ -60,13 +73,19 @@ def create_patches(file_path_original, file_path_goal, mask_path_original, mask_
             counter = 0
             for x in mask_patches:
                 for y in x:
-                    mask_name = mask_file_new_path + img_id + "_" + str(counter).zfill(2) + ".png"
-                    imageio.imwrite(mask_name, y.reshape((PATCH_SZ, PATCH_SZ)))
+
+                    y = np.where(y == 255, 1, 0) if np.any(y == 255) else y
+                    result_distance = np.ones_like(y)
+
+                    if 0 < np.count_nonzero(y) < y.size:
+                        result_distance = np.abs(get_distance(y))
+                        result_distance = 1.0 - (result_distance / np.amax(result_distance))
+                        result_distance = np.power(0.1 + np.maximum(0.9, result_distance), 2)
+
+                    res = np.dstack((y, result_distance))
+                    mask_name = mask_file_new_path + img_id + "_" + str(counter).zfill(2) + ".tif"
+                    tiff.imwrite(mask_name, res.reshape((PATCH_SZ, PATCH_SZ, 2)))
                     counter += 1
-
-
-def main():
-    create_patches(path_train_images, new_path_train_images, path_train_masks, new_path_train_masks)
 
 
 if __name__ == '__main__':

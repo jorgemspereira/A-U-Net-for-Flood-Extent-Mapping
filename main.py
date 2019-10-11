@@ -6,7 +6,8 @@ import imageio
 import numpy as np
 import tensorflow as tf
 import tifffile as tiff
-from keras import losses
+from keras import Model
+from keras import backend as K
 from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from keras.engine.saving import load_model
 from keras.optimizers import Adam
@@ -27,7 +28,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # for binary classification
 N_CLASSES = 1
 
-N_BANDS = 4
+N_BANDS = 7
 N_EPOCHS = 200
 SEED = 1234
 
@@ -40,7 +41,7 @@ WEIGHTS_PATH = 'weights_unet'
 
 if not os.path.exists(WEIGHTS_PATH):
     os.makedirs(WEIGHTS_PATH)
-WEIGHTS_PATH += '/weights.hdf5'
+WEIGHTS_PATH += '/weights_complete_7_channels.hdf5'
 
 seed(SEED)
 set_random_seed(SEED)
@@ -49,7 +50,7 @@ config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 sess = tf.Session(config=config)
 
-base_path = '/home/jpereira/A-U-Net-Model-Leveraging-Multiple-Remote-Sensing-Data-Sources-for-Flood-Extent-Mapping'
+base_path = '/tmp'
 
 path_train_images_template = '{}/dataset/devset_0{}_satellite_images_patches/'
 path_train_masks_template = "{}/dataset/devset_0{}_segmentation_masks_patches/"
@@ -67,7 +68,7 @@ def get_files(path_images, path_masks, min_range=1, max_range=7):
 
         files_input.extend([complete_path + x for x in os.listdir(complete_path) if not x.startswith("._")])
         masks_input.extend([complete_path_masks + x for x in os.listdir(complete_path_masks) if not x.startswith("._")
-                            and x.endswith(".png")])
+                            and x.endswith(".tif")])
 
     masks_input.sort(key=lambda x: x.split("/")[-1])
     files_input.sort(key=lambda x: x.split("/")[-1])
@@ -90,14 +91,12 @@ def calculate_weights(x_train):
 
     result = [((x * 100) / sum(result)) for x in result]
     result = [(100 - x) / 100 for x in result]
-
+    result = result + (1 - np.min(result))
     return result
 
 
 def generate_stratified_validation(x, y, validation_size=0.15):
-    masks = [imageio.imread(file) for file in y]
-    masks = [np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask for mask in masks]
-
+    masks = [tiff.imread(file)[:, :, 0] for file in y]
     coverage = [np.sum(mask) / pow(ORIGI_SZ, 2) for mask in masks]
 
     def cov_to_class(val):
@@ -108,6 +107,19 @@ def generate_stratified_validation(x, y, validation_size=0.15):
     coverage_class = [cov_to_class(val) for val in coverage]
 
     return train_test_split(x, y, test_size=validation_size, stratify=coverage_class, random_state=SEED)
+
+
+def custom_loss(y_true, y_pred):
+    weight = K.reshape(y_pred[:, :, :, 1], (BATCH_SIZE, PATCH_SZ, PATCH_SZ, 1))
+    y_pred = K.reshape(y_pred[:, :, :, 0], (BATCH_SIZE, PATCH_SZ, PATCH_SZ, 1))
+
+    y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+    y_pred_logit = K.log(y_pred / (1 - y_pred))
+
+    loss = (1. - y_true) * y_pred_logit + (1. + (weight - 1.) * y_true) * \
+           (K.log(1. + K.exp(-K.abs(y_pred_logit))) + K.maximum(-y_pred_logit, 0.))
+
+    return K.sum(loss) / K.sum(weight)
 
 
 def train_net():
@@ -122,7 +134,7 @@ def train_net():
     val_gen = image_generator(x_val, y_val, PATCH_SZ, batch_size=BATCH_SIZE, shuffle=False, random_transformation=False)
 
     model = unet_model(n_classes=N_CLASSES, init_seed=SEED, im_sz=PATCH_SZ, n_channels=N_BANDS)
-    model.compile(optimizer=Adam(lr=1e-3), loss=losses.binary_crossentropy, metrics=["accuracy"])
+    model.compile(optimizer=Adam(lr=1e-3), loss=custom_loss)
     model.fit_generator(train_gen,
                         steps_per_epoch=train_steps,
                         epochs=N_EPOCHS,
@@ -135,7 +147,10 @@ def train_net():
 
 def get_model(args):
     if args['mode'] == Mode.train: train_net()
-    return load_model(WEIGHTS_PATH)
+    model = load_model(WEIGHTS_PATH, custom_objects={"custom_loss": custom_loss})
+    input_layer = model.get_layer("input_layer")
+    output_layer = model.get_layer("output_layer")
+    return Model(inputs=[input_layer.input], outputs=[output_layer.output])
 
 
 def picture_from_mask(mask):
