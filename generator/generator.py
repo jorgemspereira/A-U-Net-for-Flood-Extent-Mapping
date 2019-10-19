@@ -115,7 +115,6 @@ def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=
             img_id, mask_id = ids_file_all.pop(index), ids_mask_all.pop(index)
             img, mask = get_input(img_id), get_mask(mask_id)
             if random_transformation: img, mask = get_random_transformation(img, mask, patch_size)
-            mask = np.where(mask == 255, 1, 0) if np.any(mask == 255) else mask
             x.append(img)
             y.append(mask[:, :, 0].reshape((patch_size, patch_size, 1)))
             weights_map.append(mask[:, :, 1].reshape((patch_size, patch_size, 1)))

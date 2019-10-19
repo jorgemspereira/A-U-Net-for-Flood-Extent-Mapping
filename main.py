@@ -28,7 +28,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # for binary classification
 N_CLASSES = 1
 
-N_BANDS = 7
+N_BANDS = 8
 N_EPOCHS = 200
 SEED = 1234
 
@@ -41,7 +41,7 @@ WEIGHTS_PATH = 'weights_unet'
 
 if not os.path.exists(WEIGHTS_PATH):
     os.makedirs(WEIGHTS_PATH)
-WEIGHTS_PATH += '/weights_complete_7_channels.hdf5'
+WEIGHTS_PATH += '/weights_complete_8_channels.hdf5'
 
 seed(SEED)
 set_random_seed(SEED)

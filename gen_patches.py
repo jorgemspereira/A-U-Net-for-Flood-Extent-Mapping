@@ -18,7 +18,7 @@ new_path_train_images = '{}/dataset/devset_0{}_satellite_images_patches/'
 new_path_train_masks = '{}/dataset/devset_0{}_segmentation_masks_patches/'
 
 PATCH_SZ = 128
-BANDS_SZ = 7
+BANDS_SZ = 8
 STEP_SZ = 16
 
 

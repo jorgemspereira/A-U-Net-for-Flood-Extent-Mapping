@@ -134,9 +134,9 @@ def scale(extremes, features):
 def get_other_relevant_files_for_id(id, dataset_type, index):
     paths = get_other_paths(dataset_type, index)
 
-    # elevation_extremes = get_elevation_extremes()
-    # elevation = tiff.imread([paths[0] + x for x in os.listdir(paths[0]) if x.startswith("elevation_" + id)][0])
-    # elevation = scale(elevation_extremes, elevation)
+    elevation_extremes = get_elevation_extremes()
+    elevation = tiff.imread([paths[0] + x for x in os.listdir(paths[0]) if x.startswith("elevation_" + id)][0])
+    elevation = scale(elevation_extremes, elevation)
 
     imperviousness_extremes = get_imperviousness_extremes()
     imperviousness = tiff.imread([paths[1] + x for x in os.listdir(paths[1]) if x.startswith(id)][0])
@@ -150,7 +150,7 @@ def get_other_relevant_files_for_id(id, dataset_type, index):
     ndwi = tiff.imread([paths[3] + x for x in os.listdir(paths[3]) if x.startswith(id)][0])
     ndwi = scale(ndwi_extremes, ndwi)
 
-    return np.dstack((ndvi, ndwi, imperviousness))
+    return np.dstack((ndvi, ndwi, elevation, imperviousness))
 
 
 def convert(path_original, path_goal, dataset_type, max_range):
