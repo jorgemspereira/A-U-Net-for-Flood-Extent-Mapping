@@ -42,7 +42,7 @@ The code was developed and tested in [Python](https://www.python.org/) 3.6.7 wit
 The code supports re-training and model loading from a previous saved model. To run the script simply execute:
 
 ```console
-$ python3 main.py --mode {train, load}  --chanels {three, four, six, seven, eight} 
+$ python3 main.py --mode {train, load}  --channels {three, four, six, seven, eight} 
 ```
 
 ### Acknowledgments
