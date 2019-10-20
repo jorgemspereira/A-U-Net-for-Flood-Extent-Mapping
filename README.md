@@ -2,10 +2,9 @@
 
 This repository contains the implementation for a U-Net (Ronneberg et al. 2015) model that leverages multiple remote sensing data
 for flood extent mapping using the dataset from the FDSI sub-task from the Multimedia Satellite Task of the 
-MediaEval 2017. The presented U-Net uses a dense connectivity pattern (removing the need for distant 
+MediaEval 2017. The presented U-Net leverages a dense connectivity pattern (removing the need for distant 
 layers to re-learn redundant feature maps), and Channel and Spatial Squeeze and Excite blocks 
-(re-calibrating the learned feature maps adaptively). The presented implementation uses the [keras.io](http://keras.io/) 
-deep learning library (combined with [scikit-learn](https://scikit-learn.org/stable/), and other machine learning libraries). 
+(re-calibrating the learned feature maps adaptively).
 
 ```
 @article{Ronneberger2015UNetCN,
@@ -39,15 +38,14 @@ project
 
 ### How to use  
 
-The code was developed and tested in Python 3.6.7 with Keras 2.2.4, using Tensorflow as backend. 
+The code was developed and tested in [Python](https://www.python.org/) 3.6.7 with [Keras](https://keras.io/) 2.2.4, using [Tensorflow](https://tensorflow.org) 1.13.2 as backend. 
 The code supports re-training and model loading from a previous saved model. To run the script simply execute:
 
 ```console
-$ python3 pre_process.py                  # Preprocesses the images (i.e., normalizes and joins the various files)
-$ python3 gen_patches.py                  # Generate patches from the images
-$ python3 main.py --mode {train, load}    # Train/evaluate the U-Net model
+$ python3 main.py --mode {train, load}  --chanels {three, four, six, seven, eight} 
 ```
 
 ### Acknowledgments
 
 - [Squeeze and Excitation Convolutions](https://github.com/titu1994/keras-squeeze-excite-network)
+- [Patchify](https://github.com/dovahcrow/patchify.py)

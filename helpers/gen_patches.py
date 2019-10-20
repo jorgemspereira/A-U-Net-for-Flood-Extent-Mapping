@@ -9,17 +9,11 @@ import numpy as np
 import tifffile as tiff
 
 
-base_path = '/tmp'
-
 path_train_images = '{}/dataset/devset_0{}_satellite_images/'
 path_train_masks = '{}/flood-data/devset_0{}_segmentation_masks/'
 
 new_path_train_images = '{}/dataset/devset_0{}_satellite_images_patches/'
 new_path_train_masks = '{}/dataset/devset_0{}_segmentation_masks_patches/'
-
-PATCH_SZ = 128
-BANDS_SZ = 8
-STEP_SZ = 16
 
 
 def verify_folder(folder):
@@ -36,7 +30,8 @@ def get_distance(f):
     return distance
 
 
-def main():
+def gen_patches(args, patch_size, step_size, base_path):
+    print("Generating patches...")
     for index in range(1, 7):
 
         file_path = path_train_images.format(base_path, index)
@@ -60,14 +55,14 @@ def main():
             img = tiff.imread(file_path + files[idx])
             mask = imageio.imread(mask_file_path + masks[idx])
 
-            img_patches = patchify(img, (PATCH_SZ, PATCH_SZ, BANDS_SZ), step=STEP_SZ)
-            mask_patches = patchify(mask, (PATCH_SZ, PATCH_SZ), step=STEP_SZ)
+            img_patches = patchify(img, (patch_size, patch_size, args["channels"].value), step=step_size)
+            mask_patches = patchify(mask, (patch_size, patch_size), step=step_size)
 
             counter = 0
             for x in img_patches:
                 for y in x:
                     file_name = file_new_path + img_id + "_" + str(counter).zfill(2) + ".tif"
-                    tiff.imwrite(file_name, y.reshape((PATCH_SZ, PATCH_SZ, BANDS_SZ)))
+                    tiff.imwrite(file_name, y.reshape((patch_size, patch_size, args["channels"].value)))
                     counter += 1
 
             counter = 0
@@ -84,9 +79,6 @@ def main():
 
                     res = np.dstack((y, result_distance))
                     mask_name = mask_file_new_path + img_id + "_" + str(counter).zfill(2) + ".tif"
-                    tiff.imwrite(mask_name, res.reshape((PATCH_SZ, PATCH_SZ, 2)))
+                    tiff.imwrite(mask_name, res.reshape((patch_size, patch_size, 2)))
                     counter += 1
-
-
-if __name__ == '__main__':
-    main()
+    print("Done.")

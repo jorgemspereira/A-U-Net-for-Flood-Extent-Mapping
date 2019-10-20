@@ -1,11 +1,12 @@
 import os
+import shutil
 
 import numpy as np
 import tifffile as tiff
 from tqdm import tqdm
 
+from arguments.arguments import NumberChannels
 
-base_path = '/tmp'
 
 new_path_train_images = '{}/dataset/devset_0{}_satellite_images/'
 new_path_test_images = '{}/dataset/testset_0{}_satellite_images/'
@@ -131,29 +132,36 @@ def scale(extremes, features):
     return features
 
 
-def get_other_relevant_files_for_id(id, dataset_type, index):
-    paths = get_other_paths(dataset_type, index)
+def get_other_relevant_files_for_id(args, id, dataset_type, index):
+    paths, result = get_other_paths(dataset_type, index), []
 
-    elevation_extremes = get_elevation_extremes()
-    elevation = tiff.imread([paths[0] + x for x in os.listdir(paths[0]) if x.startswith("elevation_" + id)][0])
-    elevation = scale(elevation_extremes, elevation)
+    if args['channels'] in [NumberChannels.six, NumberChannels.seven, NumberChannels.eight]:
+        ndvi_extremes = get_ndvi_extremes()
+        ndvi = tiff.imread([paths[2] + x for x in os.listdir(paths[2]) if x.startswith(id)][0])
+        ndvi = scale(ndvi_extremes, ndvi)
+        result.append(ndvi)
 
-    imperviousness_extremes = get_imperviousness_extremes()
-    imperviousness = tiff.imread([paths[1] + x for x in os.listdir(paths[1]) if x.startswith(id)][0])
-    imperviousness = scale(imperviousness_extremes, imperviousness)
+        ndwi_extremes = get_ndwi_extremes()
+        ndwi = tiff.imread([paths[3] + x for x in os.listdir(paths[3]) if x.startswith(id)][0])
+        ndwi = scale(ndwi_extremes, ndwi)
+        result.append(ndwi)
 
-    ndvi_extremes = get_ndvi_extremes()
-    ndvi = tiff.imread([paths[2] + x for x in os.listdir(paths[2]) if x.startswith(id)][0])
-    ndvi = scale(ndvi_extremes, ndvi)
+    if args['channels'] in [NumberChannels.seven, NumberChannels.eight]:
+        elevation_extremes = get_elevation_extremes()
+        elevation = tiff.imread([paths[0] + x for x in os.listdir(paths[0]) if x.startswith("elevation_" + id)][0])
+        elevation = scale(elevation_extremes, elevation)
+        result.append(elevation)
 
-    ndwi_extremes = get_ndwi_extremes()
-    ndwi = tiff.imread([paths[3] + x for x in os.listdir(paths[3]) if x.startswith(id)][0])
-    ndwi = scale(ndwi_extremes, ndwi)
+    if args['channels'] in [NumberChannels.eight]:
+        imperviousness_extremes = get_imperviousness_extremes()
+        imperviousness = tiff.imread([paths[1] + x for x in os.listdir(paths[1]) if x.startswith(id)][0])
+        imperviousness = scale(imperviousness_extremes, imperviousness)
+        result.append(imperviousness)
 
-    return np.dstack((ndvi, ndwi, elevation, imperviousness))
+    return np.dstack(result)
 
 
-def convert(path_original, path_goal, dataset_type, max_range):
+def convert(args, path_original, path_goal, dataset_type, max_range):
     for index in range(1, max_range):
         path = path_original.format(base_path, index)
         new_path = path_goal.format(base_path, index)
@@ -163,14 +171,23 @@ def convert(path_original, path_goal, dataset_type, max_range):
         for f in tqdm(files):
             img = tiff.imread(path + f)
             new_img = img / 65535
-            new_img = np.dstack((new_img, get_other_relevant_files_for_id(f.split(".")[0], dataset_type, index)))
+
+            if args['channels'] not in [NumberChannels.four, NumberChannels.three]:
+                name = f.split(".")[0]
+                new_img = np.dstack((new_img, get_other_relevant_files_for_id(args, name, dataset_type, index)))
+
+            if args['channels'] in [NumberChannels.three]:
+                new_img = new_img[:, :, 0:3]
+
             tiff.imsave(new_path + f, new_img)
 
 
-def main():
-    convert(path_train_images_template, new_path_train_images, "train", max_range=7)
-    convert(path_test_images_template, new_path_test_images, "test", max_range=8)
+def pre_process(args, path):
+    global base_path
+    base_path = path
 
-
-if __name__ == '__main__':
-    main()
+    print("Pre-processing input images...")
+    shutil.rmtree(base_path + "/dataset")
+    convert(args, path_train_images_template, new_path_train_images, "train", max_range=7)
+    convert(args, path_test_images_template, new_path_test_images, "test", max_range=8)
+    print("Done.")

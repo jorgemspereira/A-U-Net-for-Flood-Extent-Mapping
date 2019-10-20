@@ -19,8 +19,10 @@ from sklearn.model_selection import train_test_split
 from tensorflow import set_random_seed
 from tqdm import tqdm
 
-from arguments.arguments import Mode
+from arguments.arguments import Mode, NumberChannels
 from generator.generator import image_generator
+from helpers.gen_patches import gen_patches
+from helpers.pre_process import pre_process
 from model.unet_model import unet_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -28,7 +30,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # for binary classification
 N_CLASSES = 1
 
-N_BANDS = 8
 N_EPOCHS = 200
 SEED = 1234
 
@@ -41,7 +42,6 @@ WEIGHTS_PATH = 'weights_unet'
 
 if not os.path.exists(WEIGHTS_PATH):
     os.makedirs(WEIGHTS_PATH)
-WEIGHTS_PATH += '/weights_complete_8_channels.hdf5'
 
 seed(SEED)
 set_random_seed(SEED)
@@ -57,6 +57,11 @@ path_train_masks_template = "{}/dataset/devset_0{}_segmentation_masks_patches/"
 
 path_test_images_template = '{}/dataset/testset_0{}_satellite_images/'
 path_test_masks_template = "{}/flood-data/testset_0{}_segmentation_masks/"
+
+
+def update_weights_path(args):
+    global WEIGHTS_PATH
+    WEIGHTS_PATH += '/weights_complete_{}_channels.hdf5'.format(args['channels'].value)
 
 
 def get_files(path_images, path_masks, min_range=1, max_range=7):
@@ -122,7 +127,7 @@ def custom_loss(y_true, y_pred):
     return K.sum(loss) / K.sum(weight)
 
 
-def train_net():
+def train_net(args):
     x, y = get_files(path_train_images_template, path_train_masks_template)
     x_train, x_val, y_train, y_val = generate_stratified_validation(x, y, validation_size=0.15)
 
@@ -133,7 +138,7 @@ def train_net():
     train_gen = image_generator(x_train, y_train, PATCH_SZ, weights, batch_size=BATCH_SIZE, random_transformation=True)
     val_gen = image_generator(x_val, y_val, PATCH_SZ, batch_size=BATCH_SIZE, shuffle=False, random_transformation=False)
 
-    model = unet_model(n_classes=N_CLASSES, init_seed=SEED, im_sz=PATCH_SZ, n_channels=N_BANDS)
+    model = unet_model(n_classes=N_CLASSES, init_seed=SEED, im_sz=PATCH_SZ, n_channels=args['channels'].value)
     model.compile(optimizer=Adam(lr=1e-3), loss=custom_loss)
     model.fit_generator(train_gen,
                         steps_per_epoch=train_steps,
@@ -146,7 +151,7 @@ def train_net():
 
 
 def get_model(args):
-    if args['mode'] == Mode.train: train_net()
+    if args['mode'] == Mode.train: train_net(args)
     model = load_model(WEIGHTS_PATH, custom_objects={"custom_loss": custom_loss})
     input_layer = model.get_layer("input_layer")
     output_layer = model.get_layer("output_layer")
@@ -181,20 +186,20 @@ def reconstruct_patches(patches, image_size, step):
     return img / patch_count
 
 
-def predict_aux(x, model):
+def predict_aux(args, x, model):
     dim_x, dim_y, dim = x.shape
-    patches = patchify(x, (PATCH_SZ, PATCH_SZ, N_BANDS), step=STEP_SZ)
+    patches = patchify(x, (PATCH_SZ, PATCH_SZ, args['channels'].value), step=STEP_SZ)
     width_window, height_window, z, width_x, height_y, num_channel = patches.shape
     patches = np.reshape(patches, (width_window * height_window,  width_x, height_y, num_channel))
     predictions = model.predict(patches, batch_size=1)
     return reconstruct_patches(predictions, (dim_x, dim_y, N_CLASSES), STEP_SZ)
 
 
-def calculate_results_aux(model, x, y):
+def calculate_results_aux(args, model, x, y):
     tps, tns, fns, fps = 0, 0, 0, 0
 
     for index in tqdm(range(0, len(x))):
-        pred = predict_aux(tiff.imread(x[index]), model)
+        pred = predict_aux(args, tiff.imread(x[index]), model)
         name_image = y[index].split("_")[-1].split(".")[0]
         result = np.where(pred.reshape((ORIGI_SZ, ORIGI_SZ)) < 0.5, 0, 1)
 
@@ -213,15 +218,15 @@ def calculate_results_aux(model, x, y):
     return (tps + tns) / (tps + tns + fps + fns), tps / (tps + fns + fps)
 
 
-def calculate_results(model):
+def calculate_results(args, model):
     print("Calculating results...")
 
     x, y = get_files(path_test_images_template, path_test_masks_template)
-    accuracy, iou = calculate_results_aux(model, x, y)
+    accuracy, iou = calculate_results_aux(args, model, x, y)
     print("Same locations --------> Acc: {} | IOU: {}".format(accuracy, iou))
 
     x, y = get_files(path_test_images_template, path_test_masks_template, min_range=7, max_range=8)
-    accuracy, iou = calculate_results_aux(model, x, y)
+    accuracy, iou = calculate_results_aux(args, model, x, y)
     print("Different locations ---> Acc: {} | IOU: {}".format(accuracy, iou))
 
 
@@ -229,13 +234,16 @@ def calculate_results(model):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", dest='mode', choices=list(Mode), type=Mode.from_string, default=Mode.train)
+    parser.add_argument("--channels", dest='channels', choices=list(NumberChannels), type=NumberChannels.from_string, default=NumberChannels.four)
     return vars(parser.parse_args())
 
 
 def main():
     args = parse_args()
-    model = get_model(args)
-    calculate_results(model)
+    pre_process(args, base_path)
+    gen_patches(args, PATCH_SZ, STEP_SZ, base_path)
+    update_weights_path(args)
+    calculate_results(args, get_model(args))
 
 
 if __name__ == '__main__':
