@@ -187,7 +187,8 @@ def pre_process(args, path):
     base_path = path
 
     print("Pre-processing input images...")
-    shutil.rmtree(base_path + "/dataset")
+    if os.path.exists(base_path + "/dataset"):
+        shutil.rmtree(base_path + "/dataset")
     convert(args, path_train_images_template, new_path_train_images, "train", max_range=7)
     convert(args, path_test_images_template, new_path_test_images, "test", max_range=8)
     print("Done.")
