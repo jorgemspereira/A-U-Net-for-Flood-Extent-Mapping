@@ -2,6 +2,7 @@ from keras.initializers import he_uniform
 from keras.layers import *
 from keras.models import Model
 
+from model.mish import Mish
 from model.se import channel_spatial_squeeze_excite
 
 
@@ -9,14 +10,14 @@ def conv2d_compress_block(input_tensor, n_filters, init_seed=None):
     x = Conv2D(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed),
                bias_initializer=he_uniform(seed=init_seed), padding='same')(input_tensor)
     x = BatchNormalization()(x)
-    x = Activation("relu")(x)
+    x = Activation("Mish")(x)
     return x
 
 
 def conv2d_transpose_block(input_tensor, n_filters):
     x = Conv2DTranspose(n_filters, (3, 3), strides=(2, 2), padding='same')(input_tensor)
     x = BatchNormalization()(x)
-    x = Activation("relu")(x)
+    x = Activation("Mish")(x)
     return x
 
 
@@ -24,13 +25,13 @@ def conv2d_super_block(input_tensor, n_filters, init_seed=None):
     x = Conv2D(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed),
                bias_initializer=he_uniform(seed=init_seed), padding="same")(input_tensor)
     x = BatchNormalization()(x)
-    x = Activation("relu")(x)
+    x = Activation("Mish")(x)
 
     y = concatenate([x, input_tensor])
     y = Conv2D(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed),
                bias_initializer=he_uniform(seed=init_seed), padding="same")(y)
     y = BatchNormalization()(y)
-    y = Activation("relu")(y)
+    y = Activation("Mish")(y)
 
     z = concatenate([x, y, input_tensor])
     z = conv2d_compress_block(z, n_filters, init_seed=init_seed)
