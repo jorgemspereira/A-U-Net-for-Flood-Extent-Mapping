@@ -24,6 +24,7 @@ from generator.generator import image_generator
 from helpers.gen_patches import gen_patches
 from helpers.pre_process import pre_process
 from model.unet_model import unet_model
+from model.mish import Mish, mish
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -152,7 +153,7 @@ def train_net(args):
 
 def get_model(args):
     if args['mode'] == Mode.train: train_net(args)
-    model = load_model(WEIGHTS_PATH, custom_objects={"custom_loss": custom_loss})
+    model = load_model(WEIGHTS_PATH, custom_objects={"custom_loss": custom_loss, 'Mish': Mish(mish)})
     input_layer = model.get_layer("input_layer")
     output_layer = model.get_layer("output_layer")
     return Model(inputs=[input_layer.input], outputs=[output_layer.output])
