@@ -1,12 +1,34 @@
+import tensorflow as tf
 from keras.initializers import he_uniform
 from keras.layers import *
 from keras.models import Model
+from keras import backend as K
 
 from model.mish import Mish
 from model.se import channel_spatial_squeeze_excite
 
-def conv2d_compress_block(input_tensor, n_filters, init_seed=None):
-    x = Conv2D(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding='same')(input_tensor)
+class Convolution2DRotation(Convolution2D):
+    def call(self, x, mask=None):
+        w = self.W
+        w_rot = [w]
+        for i in range(7):
+            shift = 1
+            permutation = [[1, 0], [0, 0], [0, 1], [2, 0], [1, 1], [0, 2], [2, 1], [2, 2], [1, 2]]
+            for i in range(shift): w = tf.reshape(tf.gather_nd(w, permutation), w.get_shape())
+            w_rot.append(w)
+        outputs = tf.stack([K.conv2d(x, w_i, strides=self.subsample, border_mode=self.border_mode, dim_ordering=self.dim_ordering, filter_shape=self.W_shape) for w_i in w_rot])
+        output = K.concatenate(outputs, 0) # alternative can involve the use of max
+		output = channel_spatial_squeeze_excite(output, ratio=8, init_seed=init_seed)
+		if self.bias:
+            if self.dim_ordering == 'th': output += K.reshape(self.b, (1, self.nb_filter, 1, 1))
+            elif self.dim_ordering == 'tf': output += K.reshape(self.b, (1, 1, 1, self.nb_filter))
+            else: raise ValueError('Invalid dim_ordering:', self.dim_ordering)
+        output = self.activation(output)
+        return output
+
+def conv2d_compress_block(input_tensor, n_filters, , rotation=False, init_seed=None):
+    if rotation: x = Convolution2DRotation(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding='same')(input_tensor)
+    else: x = Conv2D(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding='same')(input_tensor)
     x = BatchNormalization()(x)
     x = Activation("Mish")(x)
     return x
@@ -17,16 +39,18 @@ def conv2d_transpose_block(input_tensor, n_filters):
     x = Activation("Mish")(x)
     return x
 
-def conv2d_super_block(input_tensor, n_filters, init_seed=None):
-    x = Conv2D(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(input_tensor)
+def conv2d_super_block(input_tensor, n_filters, rotation=False, init_seed=None ):
+    if rotation: x = Convolution2DRotation(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(input_tensor)
+    else: x = Conv2D(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(input_tensor)
     x = BatchNormalization()(x)
     x = Activation("Mish")(x)
     y = concatenate([x, input_tensor])
-    y = Conv2D(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(y)
+    if rotation: y = Convolution2DRotation(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(y)
+    else: y = Conv2D(filters=n_filters, kernel_size=(3, 3), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(y)
     y = BatchNormalization()(y)
     y = Activation("Mish")(y)
     z = concatenate([x, y, input_tensor])
-    z = conv2d_compress_block(z, n_filters, init_seed=init_seed)
+    z = conv2d_compress_block(z, n_filters, rotation=rotation, init_seed=init_seed)
     return z
 
 def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_start=32, growth_factor=2, droprate=0.5):
@@ -34,7 +58,7 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
 
     # Block1
     n_filters = n_filters_start
-    conv1 = conv2d_super_block(inputs, n_filters, init_seed=init_seed)
+    conv1 = conv2d_super_block(inputs, n_filters, rotation=True, init_seed=init_seed)
     conv1 = channel_spatial_squeeze_excite(conv1, init_seed=init_seed)
     pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
     pool1 = Dropout(droprate * 0.5)(pool1)
