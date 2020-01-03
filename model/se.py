@@ -3,7 +3,6 @@ from keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply, add, 
 from keras import backend as K
 from model.mish import Mish
 
-
 def squeeze_excite_block(input, init_seed=None, ratio=2):
     ''' Create a channel-wise squeeze-excite block
     Args:
@@ -25,7 +24,6 @@ def squeeze_excite_block(input, init_seed=None, ratio=2):
     x = multiply([init, se])
     return x
 
-
 def spatial_squeeze_excite_block(input, init_seed=None):
     ''' Create a spatial squeeze-excite block
     Args:
@@ -37,7 +35,6 @@ def spatial_squeeze_excite_block(input, init_seed=None):
     se = Conv2D(1, (1, 1), activation='sigmoid', use_bias=False, kernel_initializer=he_normal(seed=init_seed))(input)
     x = multiply([input, se])
     return x
-
 
 def channel_spatial_squeeze_excite(input, init_seed=None, ratio=16):
     ''' Create a spatial squeeze-excite block
