@@ -26,7 +26,7 @@ class Convolution2DRotation(Convolution2D):
         output = self.activation(output)
         return output
 
-def conv2d_compress_block(input_tensor, n_filters, , rotation=False, init_seed=None):
+def conv2d_compress_block(input_tensor, n_filters, rotation=False, init_seed=None):
     if rotation: x = Convolution2DRotation(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding='same')(input_tensor)
     else: x = Conv2D(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding='same')(input_tensor)
     x = BatchNormalization()(x)
