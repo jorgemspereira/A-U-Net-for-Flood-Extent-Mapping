@@ -18,8 +18,8 @@ class Convolution2DRotation(Convolution2D):
             w_rot.append(w)
         outputs = tf.stack([K.conv2d(x, w_i, strides=self.subsample, border_mode=self.border_mode, dim_ordering=self.dim_ordering, filter_shape=self.W_shape) for w_i in w_rot])
         output = K.concatenate(outputs, 0) # alternative can involve the use of max
-		output = channel_spatial_squeeze_excite(output, ratio=8, init_seed=init_seed)
-		if self.bias:
+	output = channel_spatial_squeeze_excite(output, ratio=8, init_seed=init_seed)
+	if self.bias:
             if self.dim_ordering == 'th': output += K.reshape(self.b, (1, self.nb_filter, 1, 1))
             elif self.dim_ordering == 'tf': output += K.reshape(self.b, (1, 1, 1, self.nb_filter))
             else: raise ValueError('Invalid dim_ordering:', self.dim_ordering)
