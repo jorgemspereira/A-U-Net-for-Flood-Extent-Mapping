@@ -17,7 +17,7 @@ class Convolution2DRotation(Convolution2D):
             for i in range(shift): w = tf.reshape(tf.gather_nd(w, permutation), w.get_shape())
             w_rot.append(w)
         outputs = tf.stack([K.conv2d(x, w_i, strides=self.subsample, border_mode=self.border_mode, dim_ordering=self.dim_ordering, filter_shape=self.W_shape) for w_i in w_rot])
-        output = K.concatenate(outputs, 0) # try using max or average instead of concatenate, if memory is an issue
+        output = K.max(outputs, 0) # try using mean or concatenate instead of max
 	if self.bias:
             if self.dim_ordering == 'th': output += K.reshape(self.b, (1, self.nb_filter, 1, 1))
             elif self.dim_ordering == 'tf': output += K.reshape(self.b, (1, 1, 1, self.nb_filter))
