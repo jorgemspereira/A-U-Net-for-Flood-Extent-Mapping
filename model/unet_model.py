@@ -3,7 +3,7 @@ from keras.initializers import he_uniform
 from keras.layers import *
 from keras.models import Model
 from model.mish import Mish, Swish
-from model.se import channel_spatial_squeeze_excite
+from model.se import channel_spatial_squeeze_excite, AttentiveNormalization
 
 def maxavgpool(input_tensor):
     x = AveragePooling2D(pool_size=(2, 2))(input_tensor)

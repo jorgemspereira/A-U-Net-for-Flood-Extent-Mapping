@@ -29,6 +29,7 @@ from model.unet_model import unet_model
 from model.mish import Mish, mish, Swish, swish
 from model.adamod import AdaMod
 from model.swa import SWA
+from model.se import AttentiveNormalization
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -136,7 +137,7 @@ def train_net(args):
 
 def get_model(args):
     if args['mode'] == Mode.train: train_net(args)
-    old_model = load_model(WEIGHTS_PATH, custom_objects={"dice_coefficient": dice_coefficient, "custom_loss": custom_loss, 'Mish': Mish(mish), 'Swish': Swish(), 'AdaMod': AdaMod })
+    old_model = load_model(WEIGHTS_PATH, custom_objects={"dice_coefficient": dice_coefficient, "custom_loss": custom_loss, 'Mish': Mish(mish), 'Swish': Swish(), 'AdaMod': AdaMod, 'AttentiveNormalization': AttentiveNormalization })
     model = unet_model(n_classes=N_CLASSES, init_seed=SEED, im_sz=PATCH_SZ, n_channels=args['channels'].value)
     model.compile(optimizer=Adam(lr=1e-3), loss=custom_loss)
     for layer in model.layers: layer.set_weights(old_model.get_layer(name=layer.name).get_weights())
@@ -203,7 +204,7 @@ def post_processing(img, output_probs):
     Q = d.inference(10)
     Q = np.argmax(np.array(Q), axis=0).reshape((h, w))
     return Q
-     
+
 def calculate_results_aux(args, model, x, y, dcrf=False, cubed=False, weighted=False):
     tps, tns, fns, fps = 0, 0, 0, 0
     for index in tqdm(range(0, len(x))):
@@ -229,7 +230,7 @@ def calculate_results(args, model):
     accuracy, iou = calculate_results_aux(args, model, x, y, cubed=True)
     print("Same locations with cubed probability estimates --------> Acc: {} | IOU: {}".format(accuracy, iou))
     accuracy, iou = calculate_results_aux(args, model, x, y, cubed=True, weighted=True)
-    print("Same locations with cubed and weighted probability estimates --------> Acc: {} | IOU: {}".format(accuracy, iou))    
+    print("Same locations with cubed and weighted probability estimates --------> Acc: {} | IOU: {}".format(accuracy, iou))
     accuracy, iou = calculate_results_aux(args, model, x, y, dcrf=True, cubed=True, weighted=True)
     print("Same locations with CRF post-processing --------> Acc: {} | IOU: {}".format(accuracy, iou))
     x, y = get_files(path_test_images_template, path_test_masks_template, min_range=7, max_range=8)
@@ -251,8 +252,8 @@ def parse_args():
 
 def main():
     args = parse_args()
-    #pre_process(args, base_path)
-    #gen_patches(args, PATCH_SZ, STEP_SZ, base_path)
+    pre_process(args, base_path)
+    gen_patches(args, PATCH_SZ, STEP_SZ, base_path)
     update_weights_path(args)
     calculate_results(args, get_model(args))
 

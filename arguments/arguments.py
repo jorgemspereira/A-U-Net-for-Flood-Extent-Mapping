@@ -3,6 +3,7 @@ from enum import Enum
 class Mode(Enum):
     train = 1
     load = 2
+
     def __str__(self):
         return self.name
 

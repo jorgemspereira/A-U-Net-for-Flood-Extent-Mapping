@@ -2,19 +2,19 @@ from keras.initializers import he_normal, Initializer
 from keras.layers import GlobalAveragePooling2D, Reshape, Dense, multiply, add, Permute, Conv2D, LeakyReLU, BatchNormalization
 from keras import backend as K
 from model.mish import Mish, Swish
- 
-class ANInitializer(Initializer):
-    def __init__(self, scale=0.1, bias=0., seed=1997):
-        super(ANInitializer, self).__init__()
-        self.scale = scale
-        self.bias = bias
-        self.seed = seed
-
-    def __call__(self, shape, dtype=None):
-        dtype = dtype or K.floatx()
-        return self.scale * K.random_normal(shape=shape, mean=0.0, stddev=1., seed=self.seed) + self.bias
 
 class AttentiveNormalization(BatchNormalization):
+
+    class ANInitializer(Initializer):
+        def __init__(self, scale=0.1, bias=0., seed=1997):
+            super(ANInitializer, self).__init__()
+            self.scale = scale
+            self.bias = bias
+            self.seed = seed
+
+        def __call__(self, shape, dtype=None):
+            dtype = dtype or K.floatx()
+            return self.scale * K.random_normal(shape=shape, mean=0.0, stddev=1., seed=self.seed) + self.bias
     
     def __init__(self, n_mixture=5, momentum=0.99, epsilon=0.1, axis=-1, **kwargs):
         super(AttentiveNormalization, self).__init__(momentum=momentum, epsilon=epsilon, axis=axis, center=False, scale=False, **kwargs)
