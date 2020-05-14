@@ -1,3 +1,4 @@
+import cv2
 import random
 import numpy as np
 import tifffile as tiff
@@ -56,8 +57,22 @@ def change_temperature(img, mode, patch_size):
     if img.shape[2]: return np.dstack((c_r, c_g, c_b, c_nir, img[:, :, 4:]))
     return np.dstack((c_r, c_g, c_b, img[:, :, 3:]))
 
+def _maybe_process_in_chunks(process_fn, **kwargs):
+    def __process_fn(img):
+        num_channels = img.shape[2]
+        if num_channels > 4:
+            chunks = []
+            for index in range(0, num_channels, 4):
+                chunk = img[:, :, index : index + 4]
+                chunk = process_fn(chunk, **kwargs)
+                chunks.append(chunk)
+            img = np.dstack(chunks)
+        else: img = process_fn(img, **kwargs)
+        return img
+    return __process_fn
+
 def get_random_transformation(img, mask, patch_size):
-    patch_img, patch_mask = img, mask    
+    patch_img, patch_mask = img, mask
     # reverse first dimension
     random_transformation = np.random.randint(1, 10)
     if random_transformation == 1:
@@ -74,6 +89,27 @@ def get_random_transformation(img, mask, patch_size):
         times = np.random.randint(1, 3)
         patch_img = np.rot90(patch_img, k=times, axes=(0, 1))
         patch_mask = np.rot90(patch_mask, k=times, axes=(0, 1))
+    # shift+scale+rotatee
+    random_transformation = np.random.randint(1, 10)
+    if random_transformation == 1:
+        angle = random.uniform(1.0, 22.5)
+        scale = random.uniform(0.0, 0.01)
+        dx = random.uniform(0.0, 0.015625)
+        dy = random.uniform(0.0, 0.015625)
+        height, width = patch_img.shape[:2]
+        center = (width / 2, height / 2)
+        matrix = cv2.getRotationMatrix2D(center, angle, scale)
+        matrix[0, 2] += dx * width
+        matrix[1, 2] += dy * height
+        warp_affine_fn = _maybe_process_in_chunks( cv2.warpAffine, M=matrix, dsize=(width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT_101 )
+        patch_img = warp_affine_fn(patch_img)
+        warp_affine_fn = _maybe_process_in_chunks( cv2.warpAffine, M=matrix, dsize=(width, height), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_REFLECT_101 )
+        patch_mask = warp_affine_fn(patch_mask)
+    # transpose image
+    random_transformation = np.random.randint(1, 10)
+    if random_transformation == 1:
+        patch_img = np.transpose(patch_img, axes=(1, 0, 2))
+        patch_mask = np.transpose(patch_mask, axes=(1, 0, 2))
     # change colour temperature
     random_transformation = np.random.randint(1, 10)
     if random_transformation == 1:
@@ -88,7 +124,7 @@ def calculate_weight(img_id, weights):
         return value
     return 1
 
-def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=5, random_transformation=False, shuffle=True):
+def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=5, random_transformation=False, shuffle=True, include_seg_mask=True):
     ids_file_all = path_input[:]
     ids_mask_all = path_mask[:]
     while True:
@@ -108,4 +144,5 @@ def image_generator(path_input, path_mask, patch_size, weights=None, batch_size=
             weights_map.append(mask[:, :, 1].reshape((patch_size, patch_size, 1)))
             weights_res.append(calculate_weight(img_id, weights))
             total_patches += 1
-        yield ([np.array(x), np.array(weights_map)], np.array(y), np.array(weights_res))
+        if include_seg_mask: yield ([np.array(x), np.array(weights_map)], np.array(y), np.array(weights_res))
+        else: yield np.array(x)

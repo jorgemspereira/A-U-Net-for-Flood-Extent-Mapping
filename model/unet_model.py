@@ -4,6 +4,7 @@ from keras.layers import *
 from keras.models import Model
 from model.mish import Mish, Swish
 from model.se import channel_spatial_squeeze_excite, AttentiveNormalization
+from model.evonorm import EvoNormS0
 
 def maxavgpool(input_tensor):
     x = AveragePooling2D(pool_size=(2, 2))(input_tensor)
@@ -12,30 +13,44 @@ def maxavgpool(input_tensor):
     zx = Multiply()([x, z])
     zy = Lambda(lambda x: x[0] * (K.constant(1.0) - x[1]))([y,z])
     return Add()([zx, zy])
+   
+def strip_hybrid_pooling(input_tensor):
+    x1 = AveragePooling2D(pool_size=(input_tensor.shape[1], 1))(input_tensor)
+    # conv1d
+    x1 = Conv2D(filters=input_tensor.shape[3], kernel_size=(1,3), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(x1)
+    x2 = AveragePooling2D(pool_size=(1, input_tensor.shape[2]))(input_tensor)
+    # transpose and conv1d
+    x2 = Conv2D(filters=input_tensor.shape[3], kernel_size=(3,1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(x2)
+    # transpose back
+    # repeat vectors
+    x = x1 * x2
+    x = Conv2D(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding='same')(x)
+    x = Activation("sigmoid")(x)
+    x = input_tensor * x
+    y = MaxPooling2D(pool_size=(2, 2))(x)
+    return y
     
 def conv2d_compress_block(input_tensor, n_filters, init_seed=None):
     x = Conv2D(filters=n_filters, kernel_size=(1, 1), kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding='same')(input_tensor)
-    x = BatchNormalization()(x)
+    x = EvoNormS0()(x)
     x = Activation("relu")(x)
     return x
 
 def conv2d_transpose_block(input_tensor, n_filters):
     x = Conv2DTranspose(n_filters, (3,3), strides=(2, 2), padding='same')(input_tensor)
-    x = BatchNormalization()(x)
+    x = EvoNormS0()(x)
     x = Activation("relu")(x)
     return x
 
 def conv2d_super_block(input_tensor, n_filters, init_seed=None):
     size = 3
     dilation_rate = 1
-    if n_filters == 32: size = 7
     x = Conv2D(filters=n_filters, kernel_size=(size, size), dilation_rate=dilation_rate, kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(input_tensor)
-    x = BatchNormalization()(x)
+    x = EvoNormS0()(x)
     x = Activation("relu")(x)
     y = concatenate([x, input_tensor])
-    size = 3
     y = Conv2D(filters=n_filters, kernel_size=(size, size), dilation_rate=dilation_rate, kernel_initializer=he_uniform(seed=init_seed), bias_initializer=he_uniform(seed=init_seed), padding="same")(y)
-    y = BatchNormalization()(y)
+    y = EvoNormS0()(y)
     y = Activation("relu")(y)
     z = concatenate([x, y, input_tensor])
     z = conv2d_compress_block(z, n_filters, init_seed=init_seed)
@@ -48,40 +63,40 @@ def unet_model(n_classes=5, init_seed=None, im_sz=160, n_channels=8, n_filters_s
     n_filters = n_filters_start
     conv1 = conv2d_super_block(inputs, n_filters, init_seed=init_seed)
     conv1 = channel_spatial_squeeze_excite(conv1, init_seed=init_seed)
-    #pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
-    pool1 = maxavgpool(conv1)
+    pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
+    #pool1 = maxavgpool(conv1)
     pool1 = Dropout(droprate * 0.5)(pool1)
 
     # Block2
     n_filters *= growth_factor
     conv2 = conv2d_super_block(pool1, n_filters, init_seed=init_seed)
     conv2 = channel_spatial_squeeze_excite(conv2, init_seed=init_seed)
-    #pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
-    pool2 = maxavgpool(conv2)
+    pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
+    #pool2 = maxavgpool(conv2)
     pool2 = Dropout(droprate)(pool2)
 
     # Block3
     n_filters *= growth_factor
     conv3 = conv2d_super_block(pool2, n_filters, init_seed=init_seed)
     conv3 = channel_spatial_squeeze_excite(conv3, init_seed=init_seed)
-    #pool3 = MaxPooling2D(pool_size=(2, 2))(conv3) 
-    pool3 = maxavgpool(conv3)
+    pool3 = MaxPooling2D(pool_size=(2, 2))(conv3) 
+    #pool3 = maxavgpool(conv3)
     pool3 = Dropout(droprate)(pool3)
 
     # Block4
     n_filters *= growth_factor
     conv4 = conv2d_super_block(pool3, n_filters, init_seed=init_seed)
     conv4 = channel_spatial_squeeze_excite(conv4, init_seed=init_seed)
-    #pool4 = MaxPooling2D(pool_size=(2, 2))(conv4)
-    pool4 = maxavgpool(conv4)
+    pool4 = MaxPooling2D(pool_size=(2, 2))(conv4)
+    #pool4 = maxavgpool(conv4)
     pool4 = Dropout(droprate)(pool4)
 
     # Block5
     n_filters *= growth_factor
     conv5 = conv2d_super_block(pool4, n_filters, init_seed=init_seed)
     conv5 = channel_spatial_squeeze_excite(conv5, init_seed=init_seed)
-    #pool5 = MaxPooling2D(pool_size=(2, 2))(conv5)
-    pool5 = maxavgpool(conv5)
+    pool5 = MaxPooling2D(pool_size=(2, 2))(conv5)
+    #pool5 = maxavgpool(conv5)
     pool5 = Dropout(droprate)(pool5)
 
     # Block6
